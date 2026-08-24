@@ -279,19 +279,3 @@ elseif SERVER then
     end
     --]]
 end
-
-local function DrawPropOBBs()
-    for _, ent in ipairs(ents.FindByClass("prop_physics")) do
-        if not IsValid(ent) then continue end
-        local mins = ent:OBBMins()
-        local maxs = ent:OBBMaxs()
-        local worldMins = ent:LocalToWorld(mins)
-        local worldMaxs = ent:LocalToWorld(maxs)
-        debugoverlay.Sphere(worldMins, 8, 0.05, Color(255, 0, 0), false) -- red = OBBMins
-        debugoverlay.Sphere(worldMaxs, 8, 0.05, Color(0, 255, 0), false) -- green = OBBMaxs
-        -- optional: also draw the actual OBB as a box outline
-        --debugoverlay.BoxAngles(ent:GetPos(), mins, maxs, ent:GetAngles(), 0.1, Color(255, 255, 0, 30))
-    end
-end
-
-hook.Remove("Think", "DrawPropOBBCrosses")
