@@ -6,18 +6,16 @@ if CLIENT then
     CreateClientConVar("pk_spawnfix", "0", true, true, "Whether or not to enable spawnfix for yourself")
     CreateClientConVar("pk_grabfix", "0", true, true, "Whether or not to enable grabfix for yourself")
     CreateClientConVar("pk_spawndist", "2048", true, true, "Distance to spawn props")
-    local function SendPropRequest(modelname)
-        net.Start("SendPropRequest")
-        net.WriteString(modelname)
-        net.SendToServer()
-    end
-    --[[
-    concommand.Add("gm_spawn_pk", function(ply, cmd, args)
-        print(args[1])
-        SendPropRequest(args[1])
-        return
+    local firsttimepressed = true
+    hook.Add("PlayerBindPress", "Suppressgm_spawnBind", function(ply, bind, pressed)
+        if GetConVar("pk_spawnfix"):GetBool() == false then return end
+        if not string.find(bind, "gm_spawn") then return end
+        firsttimepressed = not firsttimepressed
+        if firsttimepressed == false then return end
+        local args = string.Split(bind, " ")
+        RunConsoleCommand("gm_spawn_pk", args[2])
+        return true
     end)
-    --]]
 elseif SERVER then
     CreateConVar("pk_sv_spawndist", "0", FCVAR_ARCHIVE, "Whether or not to allow players to set the distance they spawn props", 0)
     CreateConVar("pk_sv_maxspawndist", "4096", FCVAR_ARCHIVE, "Max spawn distance for people using pk_spawndist", 0)
@@ -133,11 +131,6 @@ elseif SERVER then
         vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec)
         vFlushPoint = ent:GetPos() - vFlushPoint
         vFlushPoint = tr.HitPos + vFlushPoint * 0.97 -- * 0.97 moves it towards the player's physgun trace more, if we don't do this then if the player is moving away from the prop they won't grab it, even if they're holding left-click.
-        print(vFlushPoint.z, "C")
-        print("calculated" .. CurTime())
-        print("eyetrace ", GetSpawnTrace(ply, ent).HitPos)
-        print("trace pos", tr.HitPos)
-        print("DDD")
         --trackedplayer = ply
         ent.LegacyvFlushPoint = GetLegacyvFlushPoint(tr, ent)
         ent.CreationTime = engine.TickCount()
@@ -202,32 +195,12 @@ elseif SERVER then
             oldDoPropSpawnedEffect(e)
             newDoPropSpawnedEffect(e)
         end
-        --[[
-        if not newGMODSpawnProp then oldGMODSpawnProp = GMODSpawnProp end
-        function GMODSpawnProp(...)
-            oldGMODSpawnProp({...})
-            return
-        end
-        --]]
-    end
-
-    if CurTime() > 10 then -- for testing
-        AddSpawnFix()
     end
 
     --[[---------------------
         pk_grabfix
     -----------------------]]
-    --[[
-    util.AddNetworkString("SendPropRequest")
-    net.Receive("SendPropRequest", function(len, ply)
-        ply.spawnQueue = ply.spawnQueue or {}
-        local modelname = net.ReadString()
-        ply.spawnQueue[#ply.spawnQueue + 1] = modelname
-    end)
-    --]]
     concommand.Add("gm_spawn_pk", function(ply, cmd, args)
-        print(args[1])
         if ply:GetInfoNum("pk_grabfix", 0) ~= 1 then
             print("SAD!")
             RunConsoleCommand("gm_spawn", args[1])
@@ -250,7 +223,7 @@ elseif SERVER then
         ply.LastMV = mv
         local success, err
         for _, modelname in ipairs(ply.spawnQueue) do
-            success, err = pcall(GMODSpawnProp, ply, modelname, 1, "")
+            success, err = pcall(CCSpawn, ply, "gm_spawn", {modelname, 1, ""})
             if not success then ErrorNoHaltWithStack(err) end
         end
 
@@ -265,17 +238,6 @@ elseif SERVER then
 
         AddSpawnFix()
     end)
-    --[[
-    if not newDoPlayerEntitySpawn then oldDoPlayerEntitySpawn = DoPlayerEntitySpawn end
-    function newDoPlayerEntitySpawn(...)
-    end
 
-    function DoPlayerEntitySpawn(...)
-        local args = {...}
-        local mv = 
-        local e = oldDoPlayerEntitySpawn(unpack(args))
-        newDoPlayerEntitySpawn(e, mv)
-        return e
-    end
-    --]]
+    hook.Add("OnReloaded", CurrentFilePath .. "|Spawnfix", AddSpawnFix)
 end
