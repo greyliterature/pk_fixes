@@ -45,14 +45,13 @@ elseif SERVER then
             local mv = ply.LastMV
             if IsValid(mv) then
                 local origin = mv:GetOrigin()
-                local eyeheight = ply:GetShootPos().z - ply:GetPos().z
+                local eyeheight = ply:GetFixedShootPos().z - ply:GetPos().z
                 origin.z = origin.z + eyeheight
                 vStart = origin + mv:GetVelocity() / (1 / engine.TickInterval())
                 vForward = mv:GetAngles():Forward()
             end
         end
 
-        print("fix:", ply:GetFixedShootPos(), "unfix: ", ply:GetShootPos())
         local trace = {}
         trace.start = vStart
         local PlayerSpawnDist = (pk_spawndist_enabled == true and math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)) or DefaultSpawnDist
