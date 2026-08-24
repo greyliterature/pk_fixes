@@ -4,43 +4,20 @@
 local CurrentFilePath = debug.getinfo(function() end).short_src
 if CLIENT then
     CreateClientConVar("pk_spawnfix", "0", true, true, "Whether or not to enable spawnfix for yourself")
+    CreateClientConVar("pk_grabfix", "0", true, true, "Whether or not to enable grabfix for yourself")
     CreateClientConVar("pk_spawndist", "2048", true, true, "Distance to spawn props")
-    local function PropRequest(modelname) -- like iced coffee's redundnet system
-        net.Start("PropRequest")
+    local function SendPropRequest(modelname)
+        net.Start("SendPropRequest")
         net.WriteString(modelname)
         net.SendToServer()
-        print("yep", modelname)
     end
-
-    net.Receive("PropPingPoll", function()
-        net.Start("PropPingPoll")
-        net.SendToServer()
+    --[[
+    concommand.Add("gm_spawn_pk", function(ply, cmd, args)
+        print(args[1])
+        SendPropRequest(args[1])
+        return
     end)
-
-    local firsttime = true
-    hook.Add("PlayerBindPress", "SuppressPropBinds", function(ply, bind, pressed)
-        -- make this hook add remove dynamically later
-        if not string.find(bind, "gm_spawn") then return end
-        firsttime = not firsttime
-        if firsttime ~= true then return end
-        if GetConVar("pk_spawnfix"):GetBool() == true then
-            local split = string.Split(bind, " ")
-            local modelname = split[2]
-            print(modelname, util.IsValidProp("models/props/de_tides/gate_large.mdl"), "X")
-            if util.IsValidProp(modelname) then -- if its a prop then run the special command, otherwise just run gm_spawn like normal (so things like ragdolls are handled normally)
-                RunConsoleCommand("pk_gm_spawn", modelname)
-                print("ye")
-                return true
-            else
-                return
-            end
-        end
-    end)
-
-    concommand.Add("pk_gm_spawn", function(ply, cmd, args)
-        print("HI", args[1])
-        PropRequest(args[1])
-    end)
+    --]]
 elseif SERVER then
     CreateConVar("pk_sv_spawndist", "0", FCVAR_ARCHIVE, "Whether or not to allow players to set the distance they spawn props", 0)
     CreateConVar("pk_sv_maxspawndist", "4096", FCVAR_ARCHIVE, "Max spawn distance for people using pk_spawndist", 0)
@@ -63,19 +40,21 @@ elseif SERVER then
         local pk_spawndist_enabled = GetConVar("pk_sv_spawndist"):GetBool()
         local MaxSpawnDist = (pk_spawndist_enabled == true and GetConVar("pk_sv_maxspawndist"):GetInt()) or DefaultSpawnDist
         local vStart = ply:GetFixedShootPos()
-        print("fix:", ply:GetFixedShootPos(), "unfix: ", ply:GetShootPos())
         local vForward = ply:EyeAngles():Forward() -- Ignores world clicker
+        print("runned")
         if ply.LastMV then
+            print("YEP CALL")
             local mv = ply.LastMV
-            local origin = mv:GetOrigin()
-            local eyeheight = ply:GetShootPos().z - ply:GetPos().z
-            origin.z = origin.z + eyeheight
-            vStart = origin + mv:GetVelocity() / (1 / engine.TickInterval()) 
-            print(mv:GetVelocity() / (1 / engine.TickInterval()), "ASDIASDIOSA")
-            vForward = mv:GetAngles():Forward()
-            print(mv, "ASDASD")
+            if IsValid(mv) then
+                local origin = mv:GetOrigin()
+                local eyeheight = ply:GetShootPos().z - ply:GetPos().z
+                origin.z = origin.z + eyeheight
+                vStart = origin + mv:GetVelocity() / (1 / engine.TickInterval())
+                vForward = mv:GetAngles():Forward()
+            end
         end
 
+        print("fix:", ply:GetFixedShootPos(), "unfix: ", ply:GetShootPos())
         local trace = {}
         trace.start = vStart
         local PlayerSpawnDist = (pk_spawndist_enabled == true and math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)) or DefaultSpawnDist
@@ -206,7 +185,6 @@ elseif SERVER then
     local function AddSpawnFix()
         if not newDoPropSpawnedEffect then oldDoPropSpawnedEffect = DoPropSpawnedEffect end
         function newDoPropSpawnedEffect(e)
-            print("hey")
             local ent = e
             local pk_spawnfix_enabled = GetConVar("pk_sv_spawnfix"):GetBool()
             local ply = ent:GetCreator()
@@ -217,44 +195,67 @@ elseif SERVER then
                 if ShouldMoveLastProp then return end
                 ent:SetPos(GetvFlushPoint(GetSpawnTrace(ply, ent), ent))
                 -- issue: if player is running too fast away from the prop (+speed) then it doesnt grab the prop
-                --trackedplayer = nil
             end
         end
 
-        --[[
         function DoPropSpawnedEffect(e)
             oldDoPropSpawnedEffect(e)
             newDoPropSpawnedEffect(e)
         end
-
+        --[[
         if not newGMODSpawnProp then oldGMODSpawnProp = GMODSpawnProp end
         function GMODSpawnProp(...)
             oldGMODSpawnProp({...})
             return
         end
         --]]
-        util.AddNetworkString("PropRequest")
-        util.AddNetworkString("PropPingPoll")
-        net.Receive("PropRequest", function(len, ply)
-            local modelname = net.ReadString()
-            ply.RequestedPropModel = modelname
-            print("rec" .. modelname)
-            --net.Start("PropPingPoll")
-            --net.Send(ply)
-            ply.spawnQueue = ply.spawnQueue or {}
-            ply.spawnQueue[#ply.spawnQueue + 1] = modelname
-        end)
-
-        local reusable_tbl = {}
-        net.Receive("PropPingPoll", function(len, ply)
-            --reusable_tbl[1] = ply.RequestedPropModel
-            --CCSpawn(ply, "gm_spawn", reusable_tbl) -- gm_spawn supports 2 other args but it doesn't seem important enough to support.
-        end)
     end
 
     if CurTime() > 10 then -- for testing
         AddSpawnFix()
     end
+
+    --[[---------------------
+        pk_grabfix
+    -----------------------]]
+    --[[
+    util.AddNetworkString("SendPropRequest")
+    net.Receive("SendPropRequest", function(len, ply)
+        ply.spawnQueue = ply.spawnQueue or {}
+        local modelname = net.ReadString()
+        ply.spawnQueue[#ply.spawnQueue + 1] = modelname
+    end)
+    --]]
+    concommand.Add("gm_spawn_pk", function(ply, cmd, args)
+        print(args[1])
+        if ply:GetInfoNum("pk_grabfix", 0) ~= 1 then
+            print("SAD!")
+            RunConsoleCommand("gm_spawn", args[1])
+            return
+        end
+
+        local modelname = args[1]
+        ply.spawnQueue = ply.spawnQueue or {}
+        ply.spawnQueue[#ply.spawnQueue + 1] = modelname
+        ply.LastMV = nil
+        return
+    end)
+
+    hook.Add("SetupMove", CurrentFilePath .. "pk_grabfixspawnQueue", function(ply, mv, cmd)
+        if not ply.spawnQueue then
+            ply.LastMV = nil
+            return
+        end
+
+        ply.LastMV = mv
+        local success, err
+        for _, modelname in ipairs(ply.spawnQueue) do
+            success, err = pcall(GMODSpawnProp, ply, modelname, 1, "")
+            if not success then ErrorNoHaltWithStack(err) end
+        end
+
+        ply.spawnQueue = {}
+    end)
 
     hook.Add("PostGamemodeLoaded", CurrentFilePath .. "|Spawnfix", function()
         if GetConVar("pk_spawnfix") then -- PostGamemodeLoaded will always run after iced's version, so this should reliably catch conflicts
@@ -264,7 +265,6 @@ elseif SERVER then
 
         AddSpawnFix()
     end)
-
     --[[
     if not newDoPlayerEntitySpawn then oldDoPlayerEntitySpawn = DoPlayerEntitySpawn end
     function newDoPlayerEntitySpawn(...)
@@ -278,55 +278,20 @@ elseif SERVER then
         return e
     end
     --]]
-    local ShouldMoveLastProp = false
-    local LastMV = nil
-    hook.Add("PlayerSpawnedProp", CurrentFilePath .. "SetPosNewProps", function(ply, model, ent)
-        if not ShouldMoveLastProp then return end
-        --
-        print("YEAH!")
-        --ent:SetPos(GetvFlushPoint(GetSpawnTrace(ply, ent, LastMV), ent))
-        print(ply.LastMV)
-        timer.Simple(0, function()
-            local tr = util.TraceHull({
-                start = ply:GetPos() + Vector(0, 0, 20),
-                endpos = ply:GetPos(),
-                maxs = ply:OBBMaxs(),
-                mins = ply:OBBMins(),
-                filter = ply
-            })
+end
 
-            print(tr.Entity)
-            --if tr.Entity == ent and not tr.AllSolid then
-            print("YESSSS")
-            print(tr.HitPos)
-            print(ply:GetPos())
-            --ply:SetPos(tr.HitPos)
-            ply:SetPos(tr.HitPos)
-            --end
-            ply.LastMV = nil
-        end)
-
-        ent:SetPos(GetvFlushPoint(GetSpawnTrace(ply, ent), ent))
-        ShouldMoveLastProp = false
-    end)
-
-    local reusable_tbl = {}
-    hook.Add("SetupMove", "spawnprops", function(ply, mv, cmd)
-        if not ply.spawnQueue then return end
-        local success, err
-        for _, modelname in ipairs(ply.spawnQueue) do
-            --reusable_tbl[1] = modelname
-            --success, err = pcall(GMODSpawnProp, ply, reusable_tbl, mv)
-            --if not success then ErrorNoHaltWithStack(err) end
-            ShouldMoveLastProp = true
-            print(mv, "ehey")
-            ply.LastMV = mv
-            success, err = pcall(GMODSpawnProp, ply, modelname, 1, "")
-            if not success then ErrorNoHaltWithStack(err) end
-        end
-
-        ply.spawnQueue = {}
-    end)
+local function DrawPropOBBs()
+    for _, ent in ipairs(ents.FindByClass("prop_physics")) do
+        if not IsValid(ent) then continue end
+        local mins = ent:OBBMins()
+        local maxs = ent:OBBMaxs()
+        local worldMins = ent:LocalToWorld(mins)
+        local worldMaxs = ent:LocalToWorld(maxs)
+        debugoverlay.Sphere(worldMins, 8, 0.05, Color(255, 0, 0), false) -- red = OBBMins
+        debugoverlay.Sphere(worldMaxs, 8, 0.05, Color(0, 255, 0), false) -- green = OBBMaxs
+        -- optional: also draw the actual OBB as a box outline
+        --debugoverlay.BoxAngles(ent:GetPos(), mins, maxs, ent:GetAngles(), 0.1, Color(255, 255, 0, 30))
+    end
 end
 
 hook.Remove("Think", "DrawPropOBBCrosses")
