@@ -86,7 +86,7 @@ if CLIENT then
     local firsttimepressed = false
     -- Issue: if the player uses a bind to spawn the prop like 'alias tide "gm_spawn models/props/de_tides/gate_large.mdl"' then gm_spawn_pk will never be run
     hook.Add("PlayerBindPress", CurrentFilePath .. "|Suppressgm_spawnBind", function(ply, bind, pressed)
-        if tobool(GetConVar_Cached("pk_grabfix")) == false or GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
+        if tobool(GetConVar_Cached("pk_grabfix")) == false and GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
         if not string.find(bind, "gm_spawn") then return end
         firsttimepressed = not firsttimepressed
         if firsttimepressed == false then return end
