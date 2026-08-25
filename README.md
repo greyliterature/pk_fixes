@@ -7,8 +7,10 @@ Iced Coffee's version: https://gist.github.com/IcedCoffeee/971abeec986e2786ce05f
 ## pk_grabfix: 
 Whether or not to enable grab-fix for yourself. <br/>
 Tries to fix propspawn issue where grabbing props in air / at high velocity is unreliable <br/>
+
 <br/>
 Enabled client-side by Convar pk_grabfix (default=1) <br/>
+
 <br/>
 > [!NOTE]
 > Problem this solves: <br/>
@@ -21,6 +23,10 @@ Enabled client-side by Convar pk_grabfix (default=1) <br/>
 > fixedCCSpawn is a local duplicate of the original function that gm_spawn runs, CCSpawn. <br/>
 > The only practical and major difference of fixedCCSpawn() and the original CCSpawn() is that fixedCCSpawn() takes into account the player's movedata (declared by SetUpMove as ply.LastMV) <br/>
 > This basically means that pk_grabfix defers gm_spawn's CCSpawn() until SetUpMove is run, so that the entity spawn traces are run with accurate data of where the player thinks they are (?). <br/>
+
+> [!IMPORTANT]
+> Limitations:
+> This does not reliably work if the player is looking around between the angles of pitch -0.25 0.25 (possibly a bit more)
 
 ## pk_spawndist:
 Controls the distance you spawn props at. <br/>
