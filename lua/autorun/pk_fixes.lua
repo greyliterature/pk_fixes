@@ -20,15 +20,20 @@ if CLIENT then
     --[[----------------------------------------------------------------
         pk_grabfix
     ------------------------------------------------------------------]]
+    local ValidPropCache = {}
     local firsttimepressed = true
     hook.Add("PlayerBindPress", "Suppressgm_spawnBind", function(ply, bind, pressed)
-        if GetConVar("pk_grabfix"):GetBool() == false then return end
+        if GetConVar("pk_grabfix"):GetBool() == false and GetConVar("pk_spawnfix"):GetBool() == false then return end
         if not string.find(bind, "gm_spawn") then return end
         firsttimepressed = not firsttimepressed
         if firsttimepressed == false then return end
         local args = string.Split(bind, " ")
-        RunConsoleCommand("gm_spawn_pk", args[2])
-        return true
+        local modelname = args[2]
+        if ValidPropCache[modelname] or util.IsValidProp(modelname) then
+            ValidPropCache[modelname] = true
+            RunConsoleCommand("gm_spawn_pk", args[2])
+            return true
+        end
     end)
 elseif SERVER then
     ---[[ From https://steamcommunity.com/sharedfiles/filedetails/?id=2725102799, by steamcommunity.com/profiles/76561197962184163 ]]---
@@ -56,7 +61,7 @@ elseif SERVER then
         -- ent is added to args because it needs to be added to the trace filter, or else the prop will always spawned at 2048 distance, since this is called after the ent is spawned in the detour of DoPropSpawnedEffect(e)
         local vStart = ply:GetFixedShootPos()
         local vForward = ply:EyeAngles():Forward() -- Ignores world clicker
-        if ply.LastMV then
+        if ply.LastMV and ply:GetInfoNum("pk_grabfix", 0) == 1 then
             local mv = ply.LastMV
             if IsValid(mv) then -- this should never be true. was a carryover when i was doing something dumb, will delete later
                 local origin = mv:GetOrigin()
@@ -129,8 +134,17 @@ elseif SERVER then
     end)
     --]]
     local function GetvFlushPoint(tr, ent) -- https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L367-L371
+        local ShouldUseSpawnfix = GetConVar("pk_spawnfix"):GetBool() == true
+        if ShouldUseSpawnfix == false then --
+            return GetLegacyvFlushPoint(tr, ent)
+        end
+
+        local caller = ent:GetCreator()
+        if caller:GetInfoNum("pk_spawnfix", 0) == 0 then --
+            return GetLegacyvFlushPoint(tr, ent)
+        end
+
         local SlopeAngle = math.abs(vector_up.z) - math.abs(tr.HitNormal.z)
-        print(SlopeAngle, "DDD")
         local OnFlatGround = SlopeAngle < 0.03
         if OnFlatGround == true or not tr.Hit then -- revert to old method if the surface is flat enough downwards or it never hit anything
             return GetLegacyvFlushPoint(tr, ent)
@@ -138,14 +152,12 @@ elseif SERVER then
 
         local ply = ent:GetCreator()
         local aimvec = ply:GetAimVector()
-        local vFlushPoint = tr.HitPos - (tr.HitNormal * 8000000000)
-        print(tr.HitNormal)
-        vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec)
+        local vFlushPoint = tr.HitPos - (tr.HitNormal * 512)
+        vFlushPoint = ent:NearestPoint(vFlushPoint, aimvec)
         vFlushPoint = ent:GetPos() - vFlushPoint
         local multiple = 0.97 -- * 0.97 moves it towards the player's physgun trace more, if we don't do this then if the player is moving away from the prop they won't grab it, even if they're holding left-click.
         local OnFlatWall = SlopeAngle == 1
         if GetConVar("pk_sv_slopefix"):GetBool() == true and OnFlatWall == false then -- move it more on slopes 
-            print("MUltipydddddddddddddddyly")
             multiple = 0.98 -- if its on a slope, move it towards the physgun trace even more than normal. should fix slope offset issue
         end
 
@@ -190,12 +202,14 @@ elseif SERVER then
         pk_grabfix
     ------------------------------------------------------------------]]
     concommand.Add("gm_spawn_pk", function(ply, cmd, args)
+        --[[
         if ply:GetInfoNum("pk_grabfix", 0) ~= 1 then
             print("SAD!")
             RunConsoleCommand("gm_spawn", args[1])
             return
         end
-
+        --]]
+        print("run gm_spawn_pk")
         local modelname = args[1]
         ply.spawnQueue = ply.spawnQueue or {}
         ply.spawnQueue[#ply.spawnQueue + 1] = modelname
@@ -211,6 +225,7 @@ elseif SERVER then
 
     --[[----------------------------------------------------------------
         duplicate fixes
+        all of these are almost the same as the original function
     ------------------------------------------------------------------]]
     local function fixupProp(ply, ent, hitpos, mins, maxs)
         local entPos = ent:GetPos()
@@ -234,7 +249,7 @@ elseif SERVER then
         if tr_up.Hit then ent:SetPos(entPos + (tr_up.HitPos - endposU)) end
     end
 
-    local function TryFixPropPosition(ply, ent, hitpos)
+    function testTryFixPropPosition(ply, ent, hitpos)
         print(hitpos)
         fixupProp(ply, ent, hitpos, Vector(ent:OBBMins().x, 0, 0), Vector(ent:OBBMaxs().x, 0, 0))
         fixupProp(ply, ent, hitpos, Vector(0, ent:OBBMins().y, 0), Vector(0, ent:OBBMaxs().y, 0))
@@ -242,6 +257,7 @@ elseif SERVER then
     end
 
     local function fixedDoPlayerEntitySpawn(ply, entity_name, model, iSkin, strBody)
+        print("RNNN")
         local tr = GetSpawnTrace(ply)
         -- Prevent spawning too close
         --[[if ( !tr.Hit or tr.Fraction < 0.05 ) then
@@ -271,10 +287,13 @@ elseif SERVER then
         -- Attempt to move the object so it sits flush
         -- We could do a TraceEntity instead of doing all
         -- of this - but it feels off after the old way
+        --[[
         local vFlushPoint = tr.HitPos - (tr.HitNormal * 512) -- Find a point that is definitely out of the object in the direction of the floor
         vFlushPoint = ent:NearestPoint(vFlushPoint) -- Find the nearest point inside the object to that point
         vFlushPoint = ent:GetPos() - vFlushPoint -- Get the difference
         vFlushPoint = tr.HitPos + vFlushPoint -- Add it to our target pos
+        --]]
+        local vFlushPoint = GetvFlushPoint(tr, ent)
         if entity_name ~= "prop_ragdoll" then
             -- Set new position
             ent:SetPos(vFlushPoint)
@@ -309,6 +328,38 @@ elseif SERVER then
         ply:AddCleanup("props", e)
     end
 
+    local function fixedCCSpawn(ply, command, arguments)
+        -- We don't support this command from dedicated server console
+        if not IsValid(ply) then return end
+        -- Player is dead, don't allow them to spam stuff
+        if not ply:Alive() and not ply:IsAdmin() then return end
+        local modelName = arguments[1]
+        -- Make sure the model path is valid
+        if modelName == nil then return end
+        if modelName:find("%.[/\\]") then return end
+        -- Clean up the path from attempted blacklist bypasses
+        modelName = modelName:gsub("\\\\+", "/")
+        modelName = modelName:gsub("//+", "/")
+        modelName = modelName:gsub("\\/+", "/")
+        modelName = modelName:gsub("/\\+", "/")
+        -- Cleanup for checks below
+        modelName = modelName:lower()
+        modelName = modelName:gsub("\\+", "/")
+        -- Only models are allowed
+        if not modelName:StartsWith("models/") or not modelName:EndsWith(".mdl") then return end
+        -- Make sure the model is valid
+        if not util.IsValidModel(modelName) then return end
+        local iSkin = tonumber(arguments[2]) or 0
+        local strBody = arguments[3] or nil
+        -- Give the gamemode an opportunity to prevent spawning
+        -- TODO: Give strBody to the hook as well?
+        if not gamemode.Call("PlayerSpawnObject", ply, modelName, iSkin) then return end
+        if util.IsValidProp(modelName) then
+            fixedGMODSpawnProp(ply, modelName, iSkin, strBody)
+            return
+        end
+    end
+
     hook.Add("SetupMove", CurrentFilePath .. "pk_grabfixspawnQueue", function(ply, mv, cmd)
         if not ply.spawnQueue or #ply.spawnQueue == 0 then
             ply.LastMV = nil
@@ -319,7 +370,7 @@ elseif SERVER then
         local success, err
         for _, modelname in ipairs(ply.spawnQueue) do
             reusable_tbl[1] = modelname
-            success, err = pcall(fixedGMODSpawnProp, ply, modelname, 1, "")
+            success, err = pcall(fixedCCSpawn, ply, "gm_spawn", reusable_tbl) --modelname, 1, "")
             if not success then ErrorNoHaltWithStack(err) end
         end
 
