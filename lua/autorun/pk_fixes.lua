@@ -153,7 +153,7 @@ elseif SERVER then
         local ply = ent:GetCreator()
         local aimvec = ply:GetAimVector()
         local vFlushPoint = tr.HitPos - (tr.HitNormal * 512)
-        vFlushPoint = ent:NearestPoint(vFlushPoint, aimvec)
+        vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec)
         vFlushPoint = ent:GetPos() - vFlushPoint
         local multiple = 0.97 -- * 0.97 moves it towards the player's physgun trace more, if we don't do this then if the player is moving away from the prop they won't grab it, even if they're holding left-click.
         local OnFlatWall = SlopeAngle == 1
