@@ -18,7 +18,7 @@ local function CreateConVar_either(...)
     local convarname = args[1]
     local convarvalue = GetConVar(convarname):GetString()
     convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
-    convarvaluetonumber = (convarvaluetonumber == 1 and true) or false -- :GetBool()
+    --convarvaluetonumber = (convarvaluetonumber == 1 and true) or (convarvaluetonumber == 0 and false) -- :GetBool() -- this is a bad idea. pk_spawndist can be set to 1
     convarvalue = convarvaluetonumber or convarvalue
     ConvarCache[convarname] = convarvalue
     cvars.AddChangeCallback(convarname, function(_, _, value_new)
@@ -80,12 +80,13 @@ end
     pk_grabfix
     This uses Iced Coffee's method to fixing physgun grab in the air, just with less detouring
 ----------------------------------------------------------------------------------------------]]
+local DefaultSpawnDist = 2048 -- spawn distance for props by default is 2048 https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L41
 if CLIENT then
     local ValidPropCache = {} -- Probably faster than calling util.IsValidProp() on every single bindpress
     local firsttimepressed = false
     -- Issue: if the player uses a bind to spawn the prop like 'alias tide "gm_spawn models/props/de_tides/gate_large.mdl"' then gm_spawn_pk will never be run
     hook.Add("PlayerBindPress", CurrentFilePath .. "|Suppressgm_spawnBind", function(ply, bind, pressed)
-        if GetConVar_Cached("pk_grabfix") == false then return end
+        if tobool(GetConVar_Cached("pk_grabfix")) == false or GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
         if not string.find(bind, "gm_spawn") then return end
         firsttimepressed = not firsttimepressed
         if firsttimepressed == false then return end
@@ -105,7 +106,6 @@ elseif SERVER then
     --  1a: local e = DoPlayerEntitySpawn(ply, "prop_physics", model, iSkin, strBody)
     --  2a: FixInvalidPhysicsObject(e)
     --  3a: DoPropSpawnedEffect(e)
-    local DefaultSpawnDist = 2048 -- spawn distance for props by default is 2048 https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L41
     local function GetSpawnTrace(ply) -- https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L34-L45
         local vStart = ply:pk_GetFixedShootPos()
         local vForward = ply:EyeAngles():Forward() -- Ignores world clicker
@@ -121,10 +121,13 @@ elseif SERVER then
         local trace = {}
         trace.start = vStart
         --
+        local PlayerSpawnDist = DefaultSpawnDist
         local pk_spawndist_enabled = GetConVar_Cached("pk_sv_spawndist")
-        local MaxSpawnDist = (pk_spawndist_enabled == true and GetConVar_Cached("pk_sv_maxspawndist")) or DefaultSpawnDist
-        local PlayerSpawnDist = (pk_spawndist_enabled == true and math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)) or DefaultSpawnDist
-        --
+        if pk_spawndist_enabled then
+            local MaxSpawnDist = GetConVar_Cached("pk_sv_maxspawndist")
+            PlayerSpawnDist = math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)
+        end
+
         trace.endpos = vStart + vForward * PlayerSpawnDist
         trace.filter = {ply, ply:GetVehicle()}
         return util.TraceLine(trace)
