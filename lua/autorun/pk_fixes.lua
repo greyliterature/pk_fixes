@@ -197,26 +197,21 @@ elseif SERVER then
             endpos = tr.HitPos + endposU,
             filter = {ent, ply}
         })
-        -- bug: if this up at certain spots the physgun beam will show that it is grabbing the prop but isn't actually
-        if tr_up.Hit or tr_down.Hit then
-            --if tr_up.Hit and tr_down.Hit then print("hit both") end
-            if tr_down.Hit then
-                --ent:SetPos(entPos + (tr_down.HitPos - endposD))
-                print("hit dowmmmn")
-                print(vFlushPoint, entPos + (tr_down.HitPos - endposD))
-                endposD.x = endposDX
-                endposD.y = endposDY
-                vFlushPoint = (tr.HitPos + (tr_down.HitPos - endposD)) * multiple --(tr_down.HitPos - endposD)
-            elseif tr_up.Hit then
-                print("hit upr")
-                endposU.x = endposUX
-                endposU.y = endposUY
-                vFlushPoint = tr.HitPos + (tr_down.HitPos - endposU) * 200
-                print(vFlushPoint)
-                --ent:SetPos(entPos + (tr_up.HitPos - endposU)) 
-            end
 
-            vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec)
+        -- bug: if this up at certain spots the physgun beam will show that it is grabbing the prop but isn't actually
+        if tr_up.Hit then
+            print("hit upr")
+            endposU.x = endposUX
+            endposU.y = endposUY
+            print("d", vFlushPoint)
+            --vFlushPoint = tr.HitPos + (tr_up.HitPos - endposU)
+            print(vFlushPoint)
+            --ent:SetPos(entPos + (tr_up.HitPos - endposU)) 
+            print("ol", vFlushPoint)
+            --vFlushPoint = vFlushPoint + (tr.HitNormal * -100)
+            print("F", vFlushPoint)
+            --local backtowardsphysgun = ent:LocalToWorld(obbmaxs)
+            vFlushPoint = ent:NearestCollisionPoint(vFlushPoint + endposU, aimvec)
         end
         --]]
         --trackedplayer = ply
