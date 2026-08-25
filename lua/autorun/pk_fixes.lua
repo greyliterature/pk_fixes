@@ -6,24 +6,49 @@ local CurrentFilePath = debug.getinfo(function() end).short_src
         convars
 ------------------------------------------------------------------]]
 if CLIENT then
-    CreateClientConVar("pk_spawnfix", "0", true, true, "Whether or not to enable spawnfix for yourself")
     CreateClientConVar("pk_grabfix", "0", true, true, "Whether or not to enable grabfix for yourself")
     CreateClientConVar("pk_spawndist", "2048", true, true, "Distance to spawn props")
 elseif SERVER then
     CreateConVar("pk_sv_spawndist", "0", FCVAR_ARCHIVE, "Whether or not to allow players to set the distance they spawn props", 0)
     CreateConVar("pk_sv_maxspawndist", "4096", FCVAR_ARCHIVE, "Max spawn distance for people using pk_spawndist", 0)
-    CreateConVar("pk_sv_spawnfix", "1", FCVAR_ARCHIVE, "Whether or not to allow players to enable pk_spawnfix for themselves", 0)
-    CreateConVar("pk_sv_slopefix", "0", FCVAR_ARCHIVE, "Whether or not to fix prop spawns on slopes")
 end
 
+--[[----------------------------------------------------------------
+        Other
+------------------------------------------------------------------]]
+if SERVER then
+    ---[[ From https://steamcommunity.com/sharedfiles/filedetails/?id=2725102799, by steamcommunity.com/profiles/76561197962184163 ]]---
+    -- this isn't really that important for propkill, but it might fix some small issues with the trace of the propspawn
+    local PLAYERMETA = FindMetaTable("Player")
+    function PLAYERMETA:pk_GetFixedShootPos()
+        return self.pk_fixedshootpos
+    end
+
+    if PLAYERMETA.M9K_GetShootPos then -- don't add yet another SetupMove hook if these functions exist, their respective addons handle it already, a new hook is unnecessary
+        PLAYERMETA.pk_GetFixedShootPos = PLAYERMETA.M9K_GetShootPos -- https://github.com/CFC-Servers/m9k_monorepo/blob/e5c6dfff907a61db730f02b33ee0e1f5d8973b57/lua/autorun/m9k_eyeposfix.lua#L4
+    elseif PLAYERMETA.GetShootPosLua then
+        PLAYERMETA.pk_GetFixedShootPos = PLAYERMETA.GetShootPosLua -- https://steamcommunity.com/sharedfiles/filedetails/?id=2725102799
+    else
+        -- if neither functions already exist, then a new hook needs to be added to track
+        local GetShootPos = PLAYERMETA.GetShootPos
+        hook.Add("SetupMove", CurrentFilePath .. "|FixPKShootpos", function(ply, mv, cmd)
+            ply.pk_fixedshootpos = GetShootPos(ply)
+            return
+        end)
+    end
+    ---[[]]---
+end
+
+--[[--------------------------------------------------------------------------------------------
+    pk_grabfix
+    This uses Iced Coffee's method to fixing physgun grab in the air, just with less detouring
+----------------------------------------------------------------------------------------------]]
 if CLIENT then
-    --[[----------------------------------------------------------------
-        pk_grabfix
-    ------------------------------------------------------------------]]
-    local ValidPropCache = {}
-    local firsttimepressed = true
-    hook.Add("PlayerBindPress", "Suppressgm_spawnBind", function(ply, bind, pressed)
-        if GetConVar("pk_grabfix"):GetBool() == false and GetConVar("pk_spawnfix"):GetBool() == false then return end
+    local ValidPropCache = {} -- Probably faster than calling util.IsValidProp() on every single bindpress
+    local firsttimepressed = false
+    -- Issue: if the player uses a bind to spawn the prop like 'alias tide "gm_spawn models/props/de_tides/gate_large.mdl"' then gm_spawn_pk will never be run
+    hook.Add("PlayerBindPress", CurrentFilePath .. "|Suppressgm_spawnBind", function(ply, bind, pressed)
+        if GetConVar("pk_grabfix"):GetBool() == false then return end
         if not string.find(bind, "gm_spawn") then return end
         firsttimepressed = not firsttimepressed
         if firsttimepressed == false then return end
@@ -36,19 +61,6 @@ if CLIENT then
         end
     end)
 elseif SERVER then
-    ---[[ From https://steamcommunity.com/sharedfiles/filedetails/?id=2725102799, by steamcommunity.com/profiles/76561197962184163 ]]---
-    -- this isn't really that important for propkill, but it might fix some small issues with the trace of the propspawn
-    local PLAYERMETA = FindMetaTable("Player")
-    function PLAYERMETA:GetFixedShootPos()
-        return self.pk_fixedshootpos
-    end
-
-    hook.Add("SetupMove", CurrentFilePath .. "|FixPKShootpos", function(ply, mv, cmd)
-        ply.pk_fixedshootpos = ply:GetShootPos()
-        return
-    end)
-
-    ---[[]]---
     -- for reference:
     -- concommand(gm_spawn) runs:
     -- 1. CCSpawn(ply, command, arguments) 
@@ -57,19 +69,16 @@ elseif SERVER then
     --  2a: FixInvalidPhysicsObject(e)
     --  3a: DoPropSpawnedEffect(e)
     local DefaultSpawnDist = 2048 -- spawn distance for props by default is 2048 https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L41
-    local function GetSpawnTrace(ply, ent) -- https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L34-L45
-        -- ent is added to args because it needs to be added to the trace filter, or else the prop will always spawned at 2048 distance, since this is called after the ent is spawned in the detour of DoPropSpawnedEffect(e)
-        local vStart = ply:GetFixedShootPos()
+    local function GetSpawnTrace(ply) -- https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L34-L45
+        local vStart = ply:pk_GetFixedShootPos()
         local vForward = ply:EyeAngles():Forward() -- Ignores world clicker
         if ply.LastMV and ply:GetInfoNum("pk_grabfix", 0) == 1 then
             local mv = ply.LastMV
-            if IsValid(mv) then -- this should never be true. was a carryover when i was doing something dumb, will delete later
-                local origin = mv:GetOrigin()
-                local eyeheight = ply:GetFixedShootPos().z - ply:GetPos().z
-                origin.z = origin.z + eyeheight
-                vStart = origin + mv:GetVelocity() / (1 / engine.TickInterval())
-                vForward = mv:GetAngles():Forward()
-            end
+            local origin = mv:GetOrigin()
+            local eyeheight = ply:pk_GetFixedShootPos().z - ply:GetPos().z
+            origin.z = origin.z + eyeheight
+            vStart = origin + mv:GetVelocity() / (1 / engine.TickInterval())
+            vForward = mv:GetAngles():Forward()
         end
 
         local trace = {}
@@ -80,33 +89,11 @@ elseif SERVER then
         local PlayerSpawnDist = (pk_spawndist_enabled == true and math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)) or DefaultSpawnDist
         --
         trace.endpos = vStart + vForward * PlayerSpawnDist
-        trace.filter = {ply, ply:GetVehicle(), ent}
+        trace.filter = {ply, ply:GetVehicle()}
         return util.TraceLine(trace)
     end
 
-    local ENTMETA = FindMetaTable("Entity")
-    function ENTMETA:NearestCollisionPoint(origin, direction_vec) -- returns the physgun vector such that hitpos - physgun vector = closest point to which the prop can be moved and be hit by a trace
-        -- this fixes ent:NearestPoint() not working with physguns, because the physgun uses the collision mesh for its traces instead of the bounding box (which ent:NearestPoint() uses)
-        -- visually: https://files.catbox.moe/wb1hrj.PNG 
-        local physobj = self:GetPhysicsObject()
-        local bestdist = math.huge
-        local nearestpos = nil
-        for _, meshtbl in ipairs(physobj:GetMeshConvexes()) do
-            for _, vertextbl in ipairs(meshtbl) do
-                local vertexpos = self:LocalToWorld(vertextbl["pos"])
-                local len = vertexpos - origin
-                local dot = len:Dot(direction_vec)
-                local closestalongray = origin + direction_vec * dot
-                local dist = vertexpos:DistToSqr(closestalongray)
-                if dist < bestdist then
-                    bestdist = dist
-                    nearestpos = vertexpos
-                end
-            end
-        end
-        return nearestpos
-    end
-
+    -- This is the exact same method as the old vFlushPoint, I just like it as a function more
     local function GetLegacyvFlushPoint(tr, ent)
         local vFlushPoint = tr.HitPos - (tr.HitNormal * 512) -- Find a point that is definitely out of the object in the direction of the floor
         vFlushPoint = ent:NearestPoint(vFlushPoint) -- Find the nearest point inside the object to that point
@@ -115,153 +102,10 @@ elseif SERVER then
         return vFlushPoint
     end
 
-    --local reusable_vec = Vector(0, 0, 0)
-    --local trackedplayer = nil
-    --[[
-    -- the current implementation of this is a bit too awkward to be used. if a prop is spawned below the floor, then in the next tick it will be sent to vflushpoint (far above the floor).
-    hook.Add("OnPhysgunPickup", CurrentFilePath .. "|MoveToLegacyvFlushPointOnPickup", function(ply, ent)
-        if not ent.LegacyvFlushPoint then return end
-        if engine.TickCount() - ent.CreationTime == 1 then -- if its not in the same tick, then dont do anything. this prevents players from spawning a spawnfixed prop and then physgunning it way after to teleport it
-            print("moving")
-            print("before: ", ent:GetPos(), "after: ", ent.LegacyvFlushPoint)
-        end
-
-        timer.Simple(0, function()
-            ent:SetPos(ent.LegacyvFlushPoint)
-            ent.CreationTime = nil
-            ent.LegacyvFlushPoint = nil
-        end)
-    end)
-    --]]
-    local function GetvFlushPoint(tr, ent) -- https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L367-L371
-        print("yes run")
-        local ShouldUseSpawnfix = GetConVar("pk_spawnfix"):GetBool() == true
-        if ShouldUseSpawnfix == false then --
-            return GetLegacyvFlushPoint(tr, ent)
-        end
-
-        local ply = ent:GetCreator()
-        if ply:GetInfoNum("pk_spawnfix", 0) == 0 then --
-            return GetLegacyvFlushPoint(tr, ent)
-        end
-
-        local SlopeAngle = math.abs(vector_up.z) - math.abs(tr.HitNormal.z)
-        local OnFlatGround = SlopeAngle < 0.03
-        if OnFlatGround == true or not tr.Hit then -- revert to old method if the surface is flat enough downwards or it never hit anything
-            return GetLegacyvFlushPoint(tr, ent)
-        end
-
-        local aimvec = ply:GetAimVector()
-        local vFlushPoint = tr.HitPos - (tr.HitNormal * 512)
-        vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec)
-        if util.IsInWorld(vFlushPoint) then -- if the prop will spawn in the wall then pull it towards the player a bit for grab reliability
-            vFlushPoint = vFlushPoint + ply:GetAimVector() * 20
-            vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec) -- recalc to make sure physgun can still grab the pulled position
-            print("yeahe")
-        end
-
-        print("nopeee")
-        vFlushPoint = ent:GetPos() - vFlushPoint
-        local multiple = 0.97 -- * 0.97 moves it towards the player's physgun trace more, if we don't do this then if the player is moving away from the prop they won't grab it, even if they're holding left-click.
-        local OnFlatWall = SlopeAngle == 1
-        if GetConVar("pk_sv_slopefix"):GetBool() == true and OnFlatWall == false then -- move it more on slopes 
-            multiple = 0.98 -- if its on a slope, move it towards the physgun trace even more than normal. should fix slope offset issue
-        end
-
-        vFlushPoint = tr.HitPos + vFlushPoint * multiple
-        -- try and make sure the entity won't spawn in the floor or ceiling
-        local maxs, mins = ent:OBBMaxs(), ent:OBBMins()
-        local entPos = vFlushPoint
-        local endposD = ent:LocalToWorld(mins)
-        -- we only care about whether or not the trace hits directly down
-        local endposDX = endposD.x
-        local endposDY = endposD.y
-        endposD.x = 0
-        endposD.y = 0
-        --
-        local tr_down = util.TraceLine({
-            start = tr.HitPos, --entPos,
-            endpos = tr.HitPos + endposD,
-            filter = {ent, ply}
-        })
-
-        local endposU = ent:LocalToWorld(maxs)
-        -- we only care about whether or not the trace hits directly up
-        local endposUX = endposU.x
-        local endposUY = endposU.y
-        endposU.x = 0
-        endposU.y = 0
-        --
-        local tr_up = util.TraceLine({
-            start = tr.HitPos, --entPos,
-            endpos = tr.HitPos + endposU,
-            filter = {ent, ply}
-        })
-
-        -- bug: if this up at certain spots the physgun beam will show that it is grabbing the prop but isn't actually
-        if tr_up.Hit then
-            print("hit upr")
-            endposU.x = endposUX
-            endposU.y = endposUY
-            print("d", vFlushPoint)
-            --vFlushPoint = tr.HitPos + (tr_up.HitPos - endposU)
-            print(vFlushPoint)
-            --ent:SetPos(entPos + (tr_up.HitPos - endposU)) 
-            print("ol", vFlushPoint)
-            --vFlushPoint = vFlushPoint + (tr.HitNormal * -100)
-            print("F", vFlushPoint)
-            --local backtowardsphysgun = ent:LocalToWorld(obbmaxs)
-            vFlushPoint = ent:NearestCollisionPoint(vFlushPoint + endposU, aimvec)
-        end
-        --]]
-        --trackedplayer = ply
-        --ent.LegacyvFlushPoint = GetLegacyvFlushPoint(tr, ent)
-        --ent.CreationTime = engine.TickCount()
-        --[[
-        -- this seems too expensive for what it is, and also half broken. maybe going to revisit later
-        local obbmaxes = ent:OBBMaxs()
-        local obbmins = ent:OBBMins()
-        reusable_vec.x = 0
-        reusable_vec.y = 0
-        reusable_vec.z = obbmaxes.z
-        local diff_up = math.abs(vFlushPoint.z - ent:LocalToWorld(reusable_vec).z)
-        reusable_vec.x = 0
-        reusable_vec.y = 0
-        reusable_vec.z = obbmins.z
-        local diff_down = math.abs(vFlushPoint.z - ent:LocalToWorld(reusable_vec).z)
-        local flushpoint_nearest_obb_point_multiple = (diff_up < diff_down and 1) or -1 -- 1 = the flushpoint is closest to the top of the prop, -1 = the flushpoint is closest to the bottom of the prop
-        local obbcenter = ent:OBBCenter()
-        print(diff_up, diff_down, math.min(diff_up, diff_down) == diff_up)
-        local obbtopcenter = obbcenter * 1 -- copy
-        obbtopcenter.z = obbmaxes.z -- get top center 
-        local bounding_radius = obbtopcenter.z - obbcenter.z -- this is used as bounding radius, we dont want the hypotenuse from obbmins to obbmaxes, we want the distance top to center
-        tr = {
-            startpos = vFlushPoint,
-            endpos = vFlushPoint + vector_up * bounding_radius * flushpoint_nearest_obb_point_multiple -- vec_up * -bounding = can the ent be moved 
-        }
-
-        print(flushpoint_nearest_obb_point_multiple)
-        local collision_tr = util.TraceHull(tr)
-        if not collision_tr.Hit then -- if we didn't hit anything, we can afford to move the prop up or down such that it spawns at its center Z value. this looks nicer and should be more reliable to grab
-            reusable_vec.z = bounding_radius
-            vFlushPoint = vFlushPoint - reusable_vec * flushpoint_nearest_obb_point_multiple
-        end
-        --]]
-        return vFlushPoint
-    end
-
     --[[----------------------------------------------------------------
         pk_grabfix
     ------------------------------------------------------------------]]
     concommand.Add("gm_spawn_pk", function(ply, cmd, args)
-        --[[
-        if ply:GetInfoNum("pk_grabfix", 0) ~= 1 then
-            print("SAD!")
-            RunConsoleCommand("gm_spawn", args[1])
-            return
-        end
-        --]]
-        print("run gm_spawn_pk")
         local modelname = args[1]
         ply.spawnQueue = ply.spawnQueue or {}
         ply.spawnQueue[#ply.spawnQueue + 1] = modelname
@@ -269,16 +113,11 @@ elseif SERVER then
         return
     end)
 
-    local reusable_tbl = {
-        nil, -- for CCSpawn args
-        1,
-        ""
-    }
-
     --[[----------------------------------------------------------------
-        duplicate fixes
+        Fixed duplicate functions
         all of these are almost the same as the original function
     ------------------------------------------------------------------]]
+    -- Unchanged, used by TryFixPropPosition()
     local function fixupProp(ply, ent, hitpos, mins, maxs)
         local entPos = ent:GetPos()
         local endposD = ent:LocalToWorld(mins)
@@ -295,39 +134,34 @@ elseif SERVER then
             filter = {ent, ply}
         })
 
-        -- Both traces hit meaning we are probably inside a wall on both sides, do nothing
         if tr_up.Hit and tr_down.Hit then return end
         if tr_down.Hit then ent:SetPos(entPos + (tr_down.HitPos - endposD)) end
         if tr_up.Hit then ent:SetPos(entPos + (tr_up.HitPos - endposU)) end
     end
 
-    function testTryFixPropPosition(ply, ent, hitpos)
-        --[[
-        print(hitpos)
+    -- Unchanged, used by fixedDoPlayerEntitySpawn()
+    local function TryFixPropPosition(ply, ent, hitpos)
         fixupProp(ply, ent, hitpos, Vector(ent:OBBMins().x, 0, 0), Vector(ent:OBBMaxs().x, 0, 0))
         fixupProp(ply, ent, hitpos, Vector(0, ent:OBBMins().y, 0), Vector(0, ent:OBBMaxs().y, 0))
         fixupProp(ply, ent, hitpos, Vector(0, 0, ent:OBBMins().z), Vector(0, 0, ent:OBBMaxs().z))
-        --]]
     end
 
+    -- Changed to:
+    -- use mv-aware version of GetSpawnTrace(), 
+    -- early returns if entname ~= prop_physics, 
+    --remove logic accounting for non props (bloat)
     local function fixedDoPlayerEntitySpawn(ply, entity_name, model, iSkin, strBody)
-        print("RNNN")
+        if entity_name ~= "prop_physics" then -- this is a propkill function. it should only spawn prop_physics, everything else would make no sense to account for
+            return
+        end
+
         local tr = GetSpawnTrace(ply)
-        -- Prevent spawning too close
-        --[[if ( !tr.Hit or tr.Fraction < 0.05 ) then
-		return
-	end]]
         local ent = ents.Create(entity_name)
         if not IsValid(ent) then return end
         local ang = ply:EyeAngles()
-        ang.yaw = ang.yaw + 180 -- Rotate it 180 degrees in my favour
+        ang.yaw = ang.yaw + 180
         ang.roll = 0
         ang.pitch = 0
-        if entity_name == "prop_ragdoll" then
-            ang.pitch = -90
-            tr.HitPos = tr.HitPos
-        end
-
         ent:SetModel(model)
         ent:SetSkin(iSkin)
         ent:SetAngles(ang)
@@ -336,45 +170,21 @@ elseif SERVER then
         ent:SetCreator(ply)
         ent:Spawn()
         ent:Activate()
-        -- Special case for effects
-        if strBody and entity_name == "prop_effect" and IsValid(ent.AttachedEntity) then ent.AttachedEntity:SetBodyGroups(strBody) end
-        -- Attempt to move the object so it sits flush
-        -- We could do a TraceEntity instead of doing all
-        -- of this - but it feels off after the old way
-        --[[
-        local vFlushPoint = tr.HitPos - (tr.HitNormal * 512) -- Find a point that is definitely out of the object in the direction of the floor
-        vFlushPoint = ent:NearestPoint(vFlushPoint) -- Find the nearest point inside the object to that point
-        vFlushPoint = ent:GetPos() - vFlushPoint -- Get the difference
-        vFlushPoint = tr.HitPos + vFlushPoint -- Add it to our target pos
-        --]]
-        local vFlushPoint = GetvFlushPoint(tr, ent)
-        if entity_name ~= "prop_ragdoll" then
-            -- Set new position
-            ent:SetPos(vFlushPoint)
-            ply:SendLua("achievements.SpawnedProp()")
-        else
-            -- With ragdolls we need to move each physobject
-            local VecOffset = vFlushPoint - ent:GetPos()
-            for i = 0, ent:GetPhysicsObjectCount() - 1 do
-                local phys = ent:GetPhysicsObjectNum(i)
-                phys:SetPos(phys:GetPos() + VecOffset)
-            end
-
-            ply:SendLua("achievements.SpawnedRagdoll()")
-        end
-        --TryFixPropPosition(ply, ent, tr.HitPos)
+        local vFlushPoint = GetLegacyvFlushPoint(tr, ent)
+        ent:SetPos(vFlushPoint)
+        ply:SendLua("achievements.SpawnedProp()")
+        TryFixPropPosition(ply, ent, tr.HitPos)
         return ent
     end
 
+    -- Unchanged
     local function fixedGMODSpawnProp(ply, model, iSkin, strBody)
         if IsValid(ply) and not gamemode.Call("PlayerSpawnProp", ply, model) then return end
         local e = fixedDoPlayerEntitySpawn(ply, "prop_physics", model, iSkin, strBody)
         if not IsValid(e) then return end
         if IsValid(ply) then gamemode.Call("PlayerSpawnedProp", ply, model, e) end
-        -- This didn't work out - todo: Find a better way.
-        --timer.Simple( 0.01, CheckPropSolid, e, COLLISION_GROUP_NONE, COLLISION_GROUP_WORLD )
-        FixInvalidPhysicsObject(e)
-        DoPropSpawnedEffect(e)
+        FixInvalidPhysicsObject(e) -- This function doesn't need to be duplicated, it's defined global in commands.lua
+        DoPropSpawnedEffect(e) -- ditto ^
         undo.Create("prop_physics")
         undo.SetPlayer(ply)
         undo.AddEntity(e)
@@ -382,37 +192,37 @@ elseif SERVER then
         ply:AddCleanup("props", e)
     end
 
+    -- Unchanged, except now calls fixedGmodSpawnProp() instead of GmodSpawnProp()
     local function fixedCCSpawn(ply, command, arguments)
         -- We don't support this command from dedicated server console
         if not IsValid(ply) then return end
-        -- Player is dead, don't allow them to spam stuff
         if not ply:Alive() and not ply:IsAdmin() then return end
         local modelName = arguments[1]
-        -- Make sure the model path is valid
         if modelName == nil then return end
         if modelName:find("%.[/\\]") then return end
-        -- Clean up the path from attempted blacklist bypasses
         modelName = modelName:gsub("\\\\+", "/")
         modelName = modelName:gsub("//+", "/")
         modelName = modelName:gsub("\\/+", "/")
         modelName = modelName:gsub("/\\+", "/")
-        -- Cleanup for checks below
         modelName = modelName:lower()
         modelName = modelName:gsub("\\+", "/")
-        -- Only models are allowed
         if not modelName:StartsWith("models/") or not modelName:EndsWith(".mdl") then return end
-        -- Make sure the model is valid
         if not util.IsValidModel(modelName) then return end
         local iSkin = tonumber(arguments[2]) or 0
         local strBody = arguments[3] or nil
-        -- Give the gamemode an opportunity to prevent spawning
-        -- TODO: Give strBody to the hook as well?
         if not gamemode.Call("PlayerSpawnObject", ply, modelName, iSkin) then return end
         if util.IsValidProp(modelName) then
             fixedGMODSpawnProp(ply, modelName, iSkin, strBody)
             return
         end
     end
+
+    local reusable_tbl = {
+        -- {modelname, iSkin, strBody}, used by fixedCCSpawn()
+        nil,
+        0,
+        nil
+    }
 
     hook.Add("SetupMove", CurrentFilePath .. "pk_grabfixspawnQueue", function(ply, mv, cmd)
         if not ply.spawnQueue or #ply.spawnQueue == 0 then
@@ -424,88 +234,10 @@ elseif SERVER then
         local success, err
         for _, modelname in ipairs(ply.spawnQueue) do
             reusable_tbl[1] = modelname
-            success, err = pcall(fixedCCSpawn, ply, "gm_spawn", reusable_tbl) --modelname, 1, "")
+            success, err = pcall(fixedCCSpawn, ply, "gm_spawn", reusable_tbl)
             if not success then ErrorNoHaltWithStack(err) end
         end
 
         ply.spawnQueue = {}
     end)
-
-    --[[----------------------------------------------------------------
-        pk_spawnfix
-    ------------------------------------------------------------------]]
-    --[[
-    -- original function:
-        function DoPropSpawnedEffect(e)
-            if DisablePropCreateEffect then return end
-            e:SetSpawnEffect(true)
-        end
-    --]]
-    local function AddSpawnFix()
-        if not newDoPropSpawnedEffect then oldDoPropSpawnedEffect = DoPropSpawnedEffect end
-        function newDoPropSpawnedEffect(e)
-            print("called")
-            local ent = e
-            local pk_spawnfix_enabled = GetConVar("pk_sv_spawnfix"):GetBool()
-            local ply = ent:GetCreator()
-            print(pk_spawnfix_enabled, "A")
-            if pk_spawnfix_enabled == true and ply:GetInfo("pk_spawnfix") == "1" then
-                print("runing")
-                if ent:GetClass() ~= "prop_physics" then return end
-                if ShouldMoveLastProp then return end
-                --ent:SetPos(GetvFlushPoint(GetSpawnTrace(ply, ent), ent))
-                --TryFixPropPosition(ply, ent, GetSpawnTrace(ply, ent).HitPos)
-                -- issue: if player is running too fast away from the prop (+speed) then it doesnt grab the prop
-            end
-        end
-
-        function DoPropSpawnedEffect(e)
-            oldDoPropSpawnedEffect(e)
-            newDoPropSpawnedEffect(e)
-        end
-    end
-
-    --[[----------------------------------------------------------------
-        run things
-    ------------------------------------------------------------------]]
-    hook.Add("PostGamemodeLoaded", CurrentFilePath .. "|Spawnfix", function()
-        if GetConVar("pk_spawnfix") then -- PostGamemodeLoaded will always run after iced's version, so this should reliably catch conflicts
-            error("Old pk_spawnfix convar found, this script will conflict with it.")
-            return
-        end
-
-        AddSpawnFix()
-    end)
-
-    hook.Add("OnReloaded", CurrentFilePath .. "|Spawnfix", AddSpawnFix)
-    --[[----------------------------------------------------------------
-        delete this all later
-    ------------------------------------------------------------------]]
-    --[[
-    hook.Add("Think", "ddd", function()
-        for k, ply in player.Iterator() do
-            if not IsValid(ply:GetActiveWeapon()) then continue end
-            --print(Player(4):GetActiveWeapon():GetInternalVariable("m_vecAbsOrigin"))
-        end
-    end)
-
-    
-    if not newDoPlayerEntitySpawn then oldDoPlayerEntitySpawn = DoPlayerEntitySpawn end
-    --function DoPlayerEntitySpawn(ply, entity_name, model, iSkin, strBody)
-    --hook.Run("PrePlayerSpawnedProp", ply, ent)
-    --end
-    hook.Add("PlayerSpawnedProp", "ddd", function(ply, modelname, ent)
-        print(ent)
-        ent:SetPos(Vector(0, 0, 0))
-        ply:GetActiveWeapon():SetSaveValue("m_vecAbsOrigin", ent:GetPos())
-        local ang = (ent:GetPos() - ply:GetShootPos()):Angle()
-        local angstring = ang.x .. ang.y .. ang.z
-        ply:GetActiveWeapon():SetSaveValue("m_angAbsRotation", angstring)--(ent:GetPos() - ply:GetShootPos()):Angle():Forward())
-        --print((ent:GetPos() - ply:GetShootPos()):Angle())
-        print(ply:GetActiveWeapon():GetInternalVariable("m_angAbsRotation"))
-        --
-        --PrintTable(ply:GetActiveWeapon():GetSaveTable(true))
-        return
-    end)
-    --]]
 end
