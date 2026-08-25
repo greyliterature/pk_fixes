@@ -24,8 +24,9 @@ Enabled client-side by Convar pk_grabfix (default=1) <br/>
 > This basically means that pk_grabfix defers gm_spawn's CCSpawn() until SetUpMove is run, so that the entity spawn traces are run with accurate data of where the player thinks they are (?). <br/>
 
 > [!IMPORTANT]
-> Limitations:
-> This does not reliably work if the player is looking around between the angles of pitch -0.25 0.25 (possibly a bit more)
+> Limitations: <br/>
+> This does not reliably work if the player is looking around between the angles of pitch -0.25 0.25 (possibly a bit more) <br/>
+
 
 ## pk_spawndist:
 Controls the distance you spawn props at. <br/>
