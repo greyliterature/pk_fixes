@@ -5,12 +5,58 @@ local CurrentFilePath = debug.getinfo(function() end).short_src
 --[[----------------------------------------------------------------
         convars
 ------------------------------------------------------------------]]
+local ConvarCache = {}
+--[convar] = value, 
+local function CreateClientConVar_Cached(...)
+    local args = {...}
+    CreateClientConVar(unpack(args))
+    local convarname = args[1]
+    local convarvalue = GetConVar(convarname):GetString()
+    convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
+    convarvaluetonumber = (convarvaluetonumber == 1 and true) or false -- :GetBool()
+    convarvalue = convarvaluetonumber or convarvalue
+    ConvarCache[convarname] = convarvalue
+    cvars.AddChangeCallback(convarname, function(_, _, value_new)
+        ConvarCache[convarname] = value_new
+        return
+    end, convarname)
+end
+
+local function CreateConVar_Cached(...)
+    local args = {...}
+    CreateConVar(unpack(args))
+    local convarname = args[1]
+    local convarvalue = GetConVar(convarname):GetString()
+    convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
+    convarvaluetonumber = (convarvaluetonumber == 1 and true) or false -- :GetBool()
+    convarvalue = convarvaluetonumber or convarvalue
+    ConvarCache[convarname] = convarvalue
+    cvars.AddChangeCallback(convarname, function(_, _, value_new)
+        ConvarCache[convarname] = value_new
+        return
+    end, convarname)
+end
+
+local function GetConVar_Cached(convarname)
+    if ConvarCache[convarname] then
+        --
+        return ConvarCache[convarname]
+    end
+
+    -- this hopefully will never happen, the cache hopefully will always work
+    local convarvalue = GetConVar(convarname):GetString()
+    convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
+    convarvaluetonumber = (convarvaluetonumber == 1 and true) or false -- :GetBool()
+    convarvalue = convarvaluetonumber or convarvalue
+    return convarvalue
+end
+
 if CLIENT then
-    CreateClientConVar("pk_grabfix", "0", true, true, "Whether or not to enable grabfix for yourself")
-    CreateClientConVar("pk_spawndist", "2048", true, true, "Distance to spawn props")
+    CreateClientConVar_Cached("pk_grabfix", "0", true, true, "Whether or not to enable grabfix for yourself")
+    CreateClientConVar_Cached("pk_spawndist", "2048", true, true, "Distance to spawn props")
 elseif SERVER then
-    CreateConVar("pk_sv_spawndist", "0", FCVAR_ARCHIVE, "Whether or not to allow players to set the distance they spawn props", 0)
-    CreateConVar("pk_sv_maxspawndist", "4096", FCVAR_ARCHIVE, "Max spawn distance for people using pk_spawndist", 0)
+    CreateConVar_Cached("pk_sv_spawndist", "0", FCVAR_ARCHIVE, "Whether or not to allow players to set the distance they spawn props", 0)
+    CreateConVar_Cached("pk_sv_maxspawndist", "4096", FCVAR_ARCHIVE, "Max spawn distance for people using pk_spawndist", 0)
 end
 
 --[[----------------------------------------------------------------
@@ -41,7 +87,7 @@ if CLIENT then
     local firsttimepressed = false
     -- Issue: if the player uses a bind to spawn the prop like 'alias tide "gm_spawn models/props/de_tides/gate_large.mdl"' then gm_spawn_pk will never be run
     hook.Add("PlayerBindPress", CurrentFilePath .. "|Suppressgm_spawnBind", function(ply, bind, pressed)
-        if GetConVar("pk_grabfix"):GetBool() == false then return end
+        if GetConVar_Cached("pk_grabfix") == false then return end
         if not string.find(bind, "gm_spawn") then return end
         firsttimepressed = not firsttimepressed
         if firsttimepressed == false then return end
@@ -77,8 +123,8 @@ elseif SERVER then
         local trace = {}
         trace.start = vStart
         --
-        local pk_spawndist_enabled = GetConVar("pk_sv_spawndist"):GetBool()
-        local MaxSpawnDist = (pk_spawndist_enabled == true and GetConVar("pk_sv_maxspawndist"):GetInt()) or DefaultSpawnDist
+        local pk_spawndist_enabled = GetConVar_Cached("pk_sv_spawndist")
+        local MaxSpawnDist = (pk_spawndist_enabled == true and GetConVar_Cached("pk_sv_maxspawndist")) or DefaultSpawnDist
         local PlayerSpawnDist = (pk_spawndist_enabled == true and math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)) or DefaultSpawnDist
         --
         trace.endpos = vStart + vForward * PlayerSpawnDist
@@ -86,7 +132,7 @@ elseif SERVER then
         return util.TraceLine(trace)
     end
 
-    -- This is the exact same method as the old vFlushPoint, I just like it as a function more
+    -- This is the exact same method as the old vFlushPoint, I just like it as a separate function more
     local function GetLegacyvFlushPoint(tr, ent)
         local vFlushPoint = tr.HitPos - (tr.HitNormal * 512) -- Find a point that is definitely out of the object in the direction of the floor
         vFlushPoint = ent:NearestPoint(vFlushPoint) -- Find the nearest point inside the object to that point
@@ -95,9 +141,6 @@ elseif SERVER then
         return vFlushPoint
     end
 
-    --[[----------------------------------------------------------------
-        pk_grabfix
-    ------------------------------------------------------------------]]
     concommand.Add("gm_spawn_pk", function(ply, cmd, args)
         local modelname = args[1]
         ply.spawnQueue = ply.spawnQueue or {}
@@ -142,7 +185,7 @@ elseif SERVER then
     -- Changed to:
     -- use mv-aware version of GetSpawnTrace(), 
     -- early returns if entname ~= prop_physics, 
-    --remove logic accounting for non props (bloat)
+    -- remove logic accounting for non props (bloat)
     local function fixedDoPlayerEntitySpawn(ply, entity_name, model, iSkin, strBody)
         if entity_name ~= "prop_physics" then -- this is a propkill function. it should only spawn prop_physics, everything else would make no sense to account for
             return
@@ -225,10 +268,10 @@ elseif SERVER then
 
         ply.LastMV = mv
         local success, err
-        for i = #ply.spawnQueue, 1, -1 do --modelname in ipairs(ply.spawnQueue) do
+        for i = #ply.spawnQueue, 1, -1 do
             local modelname = ply.spawnQueue[i]
             reusable_tbl[1] = modelname
-            success, err = pcall(fixedCCSpawn, ply, "gm_spawn", reusable_tbl)
+            success, err = pcall(fixedCCSpawn, ply, "gm_spawn", reusable_tbl) -- I'm unsure at this point if this pcall is necessary. I don't think I've seen it error in recent versions.
             if not success then ErrorNoHaltWithStack(err) end
             table.remove(ply.spawnQueue, i)
         end
