@@ -122,8 +122,8 @@ elseif SERVER then
         trace.start = vStart
         --
         local PlayerSpawnDist = DefaultSpawnDist
-        local pk_spawndist_enabled = GetConVar_Cached("pk_sv_spawndist")
-        if pk_spawndist_enabled then
+        local pk_spawndist_enabled = tobool(GetConVar_Cached("pk_sv_spawndist"))
+        if pk_spawndist_enabled == true then
             local MaxSpawnDist = GetConVar_Cached("pk_sv_maxspawndist")
             PlayerSpawnDist = math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)
         end
