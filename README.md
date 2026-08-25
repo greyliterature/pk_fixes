@@ -11,7 +11,6 @@ Tries to fix propspawn issue where grabbing props in air / at high velocity is u
 <br/>
 Enabled client-side by Convar pk_grabfix (default=1) <br/>
 
-<br/>
 > [!NOTE]
 > Problem this solves: <br/>
 > By default gm_spawn is not aware of the player's predicted position (?). <br/>
