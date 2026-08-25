@@ -7,9 +7,14 @@ local CurrentFilePath = debug.getinfo(function() end).short_src
 ------------------------------------------------------------------]]
 local ConvarCache = {}
 --[convar] = value, 
-local function CreateClientConVar_Cached(...)
+local function CreateConVar_either(...)
     local args = {...}
-    CreateClientConVar(unpack(args))
+    if CLIENT then
+        CreateClientConVar(unpack(args))
+    elseif SERVER then
+        CreateConVar(unpack(args))
+    end
+
     local convarname = args[1]
     local convarvalue = GetConVar(convarname):GetString()
     convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
@@ -22,19 +27,12 @@ local function CreateClientConVar_Cached(...)
     end, convarname)
 end
 
+local function CreateClientConVar_Cached(...)
+    CreateConVar_either(unpack({...}))
+end
+
 local function CreateConVar_Cached(...)
-    local args = {...}
-    CreateConVar(unpack(args))
-    local convarname = args[1]
-    local convarvalue = GetConVar(convarname):GetString()
-    convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
-    convarvaluetonumber = (convarvaluetonumber == 1 and true) or false -- :GetBool()
-    convarvalue = convarvaluetonumber or convarvalue
-    ConvarCache[convarname] = convarvalue
-    cvars.AddChangeCallback(convarname, function(_, _, value_new)
-        ConvarCache[convarname] = value_new
-        return
-    end, convarname)
+    CreateConVar_either(unpack({...}))
 end
 
 local function GetConVar_Cached(convarname)
