@@ -107,12 +107,12 @@ elseif SERVER then
     --  2a: FixInvalidPhysicsObject(e)
     --  3a: DoPropSpawnedEffect(e)
     local function GetSpawnTrace(ply) -- https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L34-L45
-        local vStart = ply:pk_GetFixedShootPos()
+        local vStart = ply:GetShootPos()
         local vForward = ply:EyeAngles():Forward() -- Ignores world clicker
         if ply.LastMV and ply:GetInfoNum("pk_grabfix", 0) == 1 then
             local mv = ply.LastMV
             local origin = mv:GetOrigin()
-            local eyeheight = ply:pk_GetFixedShootPos().z - ply:GetPos().z
+            local eyeheight = ply:GetShootPos().z - ply:GetPos().z
             origin.z = origin.z + eyeheight
             vStart = origin + mv:GetVelocity() / (1 / engine.TickInterval())
             vForward = mv:GetAngles():Forward()
