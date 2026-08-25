@@ -232,12 +232,12 @@ elseif SERVER then
 
         ply.LastMV = mv
         local success, err
-        for _, modelname in ipairs(ply.spawnQueue) do
+        for i = #ply.spawnQueue, 1, -1 do --modelname in ipairs(ply.spawnQueue) do
+            local modelname = ply.spawnQueue[i]
             reusable_tbl[1] = modelname
             success, err = pcall(fixedCCSpawn, ply, "gm_spawn", reusable_tbl)
             if not success then ErrorNoHaltWithStack(err) end
+            table.remove(ply.spawnQueue, i)
         end
-
-        ply.spawnQueue = {}
     end)
 end
