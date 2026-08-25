@@ -24,18 +24,11 @@ if SERVER then
         return self.pk_fixedshootpos
     end
 
-    if PLAYERMETA.M9K_GetShootPos then -- don't add yet another SetupMove hook if these functions exist, their respective addons handle it already, a new hook is unnecessary
-        PLAYERMETA.pk_GetFixedShootPos = PLAYERMETA.M9K_GetShootPos -- https://github.com/CFC-Servers/m9k_monorepo/blob/e5c6dfff907a61db730f02b33ee0e1f5d8973b57/lua/autorun/m9k_eyeposfix.lua#L4
-    elseif PLAYERMETA.GetShootPosLua then
-        PLAYERMETA.pk_GetFixedShootPos = PLAYERMETA.GetShootPosLua -- https://steamcommunity.com/sharedfiles/filedetails/?id=2725102799
-    else
-        -- if neither functions already exist, then a new hook needs to be added to track
-        local GetShootPos = PLAYERMETA.GetShootPos
-        hook.Add("SetupMove", CurrentFilePath .. "|FixPKShootpos", function(ply, mv, cmd)
-            ply.pk_fixedshootpos = GetShootPos(ply)
-            return
-        end)
-    end
+    local GetShootPos = PLAYERMETA.GetShootPos
+    hook.Add("SetupMove", CurrentFilePath .. "|FixPKShootpos", function(ply, mv, cmd)
+        ply.pk_fixedshootpos = GetShootPos(ply)
+        return
+    end)
     ---[[]]---
 end
 
