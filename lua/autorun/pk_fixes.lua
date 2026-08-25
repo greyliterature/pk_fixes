@@ -134,13 +134,14 @@ elseif SERVER then
     end)
     --]]
     local function GetvFlushPoint(tr, ent) -- https://github.com/Facepunch/garrysmod/blob/946ed9f101ad36a7ce601e1ea0ae2c9c64bc6e22/garrysmod/gamemodes/sandbox/gamemode/commands.lua#L367-L371
+        print("yes run")
         local ShouldUseSpawnfix = GetConVar("pk_spawnfix"):GetBool() == true
         if ShouldUseSpawnfix == false then --
             return GetLegacyvFlushPoint(tr, ent)
         end
 
-        local caller = ent:GetCreator()
-        if caller:GetInfoNum("pk_spawnfix", 0) == 0 then --
+        local ply = ent:GetCreator()
+        if ply:GetInfoNum("pk_spawnfix", 0) == 0 then --
             return GetLegacyvFlushPoint(tr, ent)
         end
 
@@ -150,10 +151,16 @@ elseif SERVER then
             return GetLegacyvFlushPoint(tr, ent)
         end
 
-        local ply = ent:GetCreator()
         local aimvec = ply:GetAimVector()
         local vFlushPoint = tr.HitPos - (tr.HitNormal * 512)
         vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec)
+        if util.IsInWorld(vFlushPoint) then -- if the prop will spawn in the wall then pull it towards the player a bit for grab reliability
+            vFlushPoint = vFlushPoint + ply:GetAimVector() * 20
+            vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec) -- recalc to make sure physgun can still grab the pulled position
+            print("yeahe")
+        end
+
+        print("nopeee")
         vFlushPoint = ent:GetPos() - vFlushPoint
         local multiple = 0.97 -- * 0.97 moves it towards the player's physgun trace more, if we don't do this then if the player is moving away from the prop they won't grab it, even if they're holding left-click.
         local OnFlatWall = SlopeAngle == 1
@@ -162,6 +169,56 @@ elseif SERVER then
         end
 
         vFlushPoint = tr.HitPos + vFlushPoint * multiple
+        -- try and make sure the entity won't spawn in the floor or ceiling
+        local maxs, mins = ent:OBBMaxs(), ent:OBBMins()
+        local entPos = vFlushPoint
+        local endposD = ent:LocalToWorld(mins)
+        -- we only care about whether or not the trace hits directly down
+        local endposDX = endposD.x
+        local endposDY = endposD.y
+        endposD.x = 0
+        endposD.y = 0
+        --
+        local tr_down = util.TraceLine({
+            start = tr.HitPos, --entPos,
+            endpos = tr.HitPos + endposD,
+            filter = {ent, ply}
+        })
+
+        local endposU = ent:LocalToWorld(maxs)
+        -- we only care about whether or not the trace hits directly up
+        local endposUX = endposU.x
+        local endposUY = endposU.y
+        endposU.x = 0
+        endposU.y = 0
+        --
+        local tr_up = util.TraceLine({
+            start = tr.HitPos, --entPos,
+            endpos = tr.HitPos + endposU,
+            filter = {ent, ply}
+        })
+        -- bug: if this up at certain spots the physgun beam will show that it is grabbing the prop but isn't actually
+        if tr_up.Hit or tr_down.Hit then
+            --if tr_up.Hit and tr_down.Hit then print("hit both") end
+            if tr_down.Hit then
+                --ent:SetPos(entPos + (tr_down.HitPos - endposD))
+                print("hit dowmmmn")
+                print(vFlushPoint, entPos + (tr_down.HitPos - endposD))
+                endposD.x = endposDX
+                endposD.y = endposDY
+                vFlushPoint = (tr.HitPos + (tr_down.HitPos - endposD)) * multiple --(tr_down.HitPos - endposD)
+            elseif tr_up.Hit then
+                print("hit upr")
+                endposU.x = endposUX
+                endposU.y = endposUY
+                vFlushPoint = tr.HitPos + (tr_down.HitPos - endposU) * 200
+                print(vFlushPoint)
+                --ent:SetPos(entPos + (tr_up.HitPos - endposU)) 
+            end
+
+            vFlushPoint = ent:NearestCollisionPoint(vFlushPoint, aimvec)
+        end
+        --]]
         --trackedplayer = ply
         --ent.LegacyvFlushPoint = GetLegacyvFlushPoint(tr, ent)
         --ent.CreationTime = engine.TickCount()
@@ -250,10 +307,12 @@ elseif SERVER then
     end
 
     function testTryFixPropPosition(ply, ent, hitpos)
+        --[[
         print(hitpos)
         fixupProp(ply, ent, hitpos, Vector(ent:OBBMins().x, 0, 0), Vector(ent:OBBMaxs().x, 0, 0))
         fixupProp(ply, ent, hitpos, Vector(0, ent:OBBMins().y, 0), Vector(0, ent:OBBMaxs().y, 0))
         fixupProp(ply, ent, hitpos, Vector(0, 0, ent:OBBMins().z), Vector(0, 0, ent:OBBMaxs().z))
+        --]]
     end
 
     local function fixedDoPlayerEntitySpawn(ply, entity_name, model, iSkin, strBody)
@@ -399,7 +458,7 @@ elseif SERVER then
                 print("runing")
                 if ent:GetClass() ~= "prop_physics" then return end
                 if ShouldMoveLastProp then return end
-                ent:SetPos(GetvFlushPoint(GetSpawnTrace(ply, ent), ent))
+                --ent:SetPos(GetvFlushPoint(GetSpawnTrace(ply, ent), ent))
                 --TryFixPropPosition(ply, ent, GetSpawnTrace(ply, ent).HitPos)
                 -- issue: if player is running too fast away from the prop (+speed) then it doesnt grab the prop
             end
