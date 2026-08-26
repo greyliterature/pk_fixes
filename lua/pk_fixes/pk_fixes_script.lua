@@ -52,11 +52,14 @@ end
 if CLIENT then
     CreateClientConVar_Cached("pk_grabfix", "0", true, true, "Whether or not to enable grabfix for yourself")
     CreateClientConVar_Cached("pk_spawndist", "2048", true, true, "Distance to spawn props")
+    CreateClientConVar_Cached("pk_spawnfix", "0", true, true, "Whether or not to enable spawnfix for yourself")
 elseif SERVER then
     CreateConVar_Cached("pk_sv_spawndist", "0", FCVAR_ARCHIVE, "Whether or not to allow players to set the distance they spawn props", 0)
     CreateConVar_Cached("pk_sv_maxspawndist", "4096", FCVAR_ARCHIVE, "Max spawn distance for people using pk_spawndist", 0)
     CreateConVar_Cached("pk_sv_enable_maxsize", "0", FCVAR_ARCHIVE, "Whether or not to use value from pk_sv_maxsize", 0)
     CreateConVar_Cached("pk_sv_maxsize", "136", FCVAR_ARCHIVE, "The maximum bounding radius (center to furthest corner) a prop can be to do damage. Used to restrict overly large props (8x8 cubes) from propkill. \nREFERENCE: tide = 136, frige = 49, moped = 28", 0)
+    CreateConVar_Cached("pk_sv_enable_tryfix", "1", FCVAR_ARCHIVE, "Whether or not to use TryFixPropPosition in gm_spawn_pk. This is used in the original method for prop spawn positioning, but is flawed (props can spawn across entire walls and be ungrabbable). Recommended to turn this off, unless you really like the legacy gmod behavior.", 0)
+    CreateConVar_Cached("pk_sv_enable_spawnfix", "0", FCVAR_ARCHIVE, "Whether or not to allow players to use pk_spawnfix", 0)
 end
 
 --[[----------------------------------------------------------------
@@ -167,37 +170,35 @@ elseif SERVER then
     local function GetvFlushPoint(tr, ent)
         local OnFlatWall = tr.HitNormal.z == 0
         local OnFlatGround = tr.HitNormal.z > 0.9 or tr.HitNormal.z < -0.9 and OnFlatWall == false
-        --GetConVar_Cached("pk_slopefix") == 1
-        local pk_slopefix_enabled = true
+        --
+        local ply = ent:GetCreator()
+        local pk_spawnfix_enabled = GetConVar_Cached("pk_sv_enable_spawnfix") == 1 and ply:GetInfoNum("pk_spawnfix", 0) == 1
         local DeadOn = false
         if OnFlatWall == true then
             local WallHitAngle = tr.HitNormal:Dot(tr.Normal)
             -- the angle you're looking at the wall
             print(WallHitAngle)
-            DeadOn = WallHitAngle < -0.95 -- if we hit the wall nearly straight on, NearestPoint() is accurate enough (usually more accurate), so just use that
+            DeadOn = WallHitAngle < -0.99 -- if we hit the wall nearly straight on, NearestPoint() is accurate enough (usually more accurate), so just use that
         end
 
-        local shouldUseCollisionPoint = pk_slopefix_enabled == true and OnFlatGround == false
+        local shouldUseCollisionPoint = pk_spawnfix_enabled == true and OnFlatGround == false and DeadOn == false
         local NormalMultiple = tr.HitNormal * 512
-        if shouldUseCollisionPoint == false then
-            print("1")
-            NormalMultiple = tr.HitNormal * 512
-        elseif DeadOn == false then
+        if shouldUseCollisionPoint == true and DeadOn == true and OnFlatWall == false then
             print("2")
-            NormalMultiple = tr.HitNormal
+            NormalMultiple = tr.HitNormal * 256
         elseif OnFlatWall == true then
-            -- if it is on a flat wall then we should not nudge it so much, or else the ending math will put it outside the world
             print("3")
-            NormalMultiple = tr.HitNormal * 512
+            NormalMultiple = tr.HitNormal * 256
         end
 
+        print(tr.HitNormal)
         local vFlushPoint = tr.HitPos - NormalMultiple
         print(DeadOn, shouldUseCollisionPoint)
-        vFlushPoint = ((shouldUseCollisionPoint == true and DeadOn == false) and ent:NearestCollisionPoint(vFlushPoint, tr.Normal)) or ent:NearestPoint(vFlushPoint)
+        vFlushPoint = ((shouldUseCollisionPoint == true) and ent:NearestCollisionPoint(vFlushPoint, tr.Normal)) or ent:NearestPoint(vFlushPoint)
         vFlushPoint = ent:GetPos() - vFlushPoint
         vFlushPoint = tr.HitPos + vFlushPoint
         if shouldUseCollisionPoint == true then --pk_slopefix_enabled == true and OnFlatGround == false then
-            --vFlushPoint = vFlushPoint - tr.Normal * 20 -- move it towards the player so it doesn't spawn inside th slope
+            vFlushPoint = vFlushPoint - tr.Normal * 20 -- move it towards the player so it doesn't spawn inside th slope
         end
         return vFlushPoint
     end
@@ -271,7 +272,9 @@ elseif SERVER then
         local vFlushPoint = GetvFlushPoint(tr, ent)
         ent:SetPos(vFlushPoint)
         ply:SendLua("achievements.SpawnedProp()")
-        TryFixPropPosition(ply, ent, tr.HitPos)
+        if GetConVar_Cached("pk_sv_enable_tryfix") == 1 then -- This function is incredibly painful to deal with. Please turn it off.
+            TryFixPropPosition(ply, ent, tr.HitPos)
+        end
         return ent
     end
 
