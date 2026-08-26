@@ -182,7 +182,7 @@ elseif SERVER then
 		--
 		local ply = ent:GetCreator()
 		local pk_spawnfix_enabled = GetConVar_Cached("pk_sv_enable_spawnfix") == 1 and ply:GetInfoNum("pk_spawnfix", 0) == 1
-		local isModelCoaster = Coasters[ent:GetModel()] == true and OnFlatGround == false and OnFlatWall == false -- coasters work fine on slopes almost no matter what, so whitelist them
+		local isModelCoaster = Coasters[ent:GetModel()] == true
 		local shouldUseCollisionPoint = pk_spawnfix_enabled == true and InOpenAir == false and OnFlatGround == false and isModelCoaster == false
 		local NormalMultiple = tr.HitNormal * 512
 		local vFlushPoint = tr.HitPos - NormalMultiple
