@@ -4,6 +4,7 @@ I had other fixes in the script, but those have been moved to experimental-branc
 Iced Coffee had the original idea for these fixes, as well as most of the code, I just wanted to implement it in a different way that would work for general sandbox servers <br/>
 Iced Coffee's version: https://gist.github.com/IcedCoffeee/971abeec986e2786ce05f4dee0a17473 <br/>
 
+# Fixes: 
 ## pk_grabfix: 
 Whether or not to enable grab-fix for yourself. <br/>
 Tries to fix propspawn issue where grabbing props in air / at high velocity is unreliable <br/>
@@ -28,6 +29,7 @@ Enabled client-side by Convar pk_grabfix (default=1) <br/>
 > This does not reliably work if the player is looking around between the angles of pitch -0.25 0.25 (possibly a bit more) <br/>
 > Also does not reliably work with very small props (like moped wheel)
 
+# Additions:
 ## pk_spawndist:
 Controls the distance you spawn props at. <br/>
 <br/>
