@@ -26,7 +26,7 @@ Enabled client-side by Convar pk_grabfix (default=1) <br/>
 > [!IMPORTANT]
 > Limitations: <br/>
 > This does not reliably work if the player is looking around between the angles of pitch -0.25 0.25 (possibly a bit more) <br/>
-
+> Also does not reliably work with very small props (like moped wheel)
 
 ## pk_spawndist:
 Controls the distance you spawn props at. <br/>
