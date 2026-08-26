@@ -19,6 +19,7 @@ TryFixPropPosition() is a flawed function that tries to make the prop spawn insi
 
 <br/>
 Enabled server-side by Convar pk_sv_enable_tryfix (default=1)
+
 ## pk_grabfix: 
 Whether or not to enable grab-fix for yourself. <br/>
 Tries to fix propspawn issue where grabbing props in air / at high velocity is unreliable <br/>
