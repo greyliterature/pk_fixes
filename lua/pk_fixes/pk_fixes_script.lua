@@ -119,11 +119,12 @@ if CLIENT then
     local firsttimepressed = false
     -- Issue: if the player uses a bind to spawn the prop like 'alias tide "gm_spawn models/props/de_tides/gate_large.mdl"' then gm_spawn_pk will never be run
     hook.Add("PlayerBindPress", CurrentFilePath .. "|Suppressgm_spawnBind", function(ply, bind, pressed)
-        if GetConVar_Cached("pk_grabfix") ~= 1 and GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
-        if not string.find(bind, "gm_spawn") then return end
+	if GetConVar_Cached("pk_grabfix") ~= 1 and GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
+	local alias = input.TranslateAlias(bind)
+        if not string.find(alias or bind, "gm_spawn") then return end
         firsttimepressed = not firsttimepressed
         if firsttimepressed == false then return end
-        local args = string.Split(bind, " ")
+        local args = string.Split(alias or bind, " ")
         local modelname = args[2]
         if ValidPropCache[modelname] or util.IsValidProp(modelname) then
             ValidPropCache[modelname] = true
@@ -169,9 +170,8 @@ elseif SERVER then
     -- No longer the same method as the legacy vFlushPoint. This now accounts for slopes and collision meshes instead of using bounding boxes
     local function GetvFlushPoint(tr, ent)
 	local InOpenAir = tr.Hit == false
-	print(InOpenAir, "CCC")
         local OnFlatWall = tr.HitNormal.z == 0
-        local OnFlatGround = tr.HitNormal.z > 0.9 or tr.HitNormal.z < -0.9 and OnFlatWall == false
+        local OnFlatGround = tr.HitNormal.z > 0.99 or tr.HitNormal.z < -0.99 and OnFlatWall == false
         --
         local ply = ent:GetCreator()
         local pk_spawnfix_enabled = GetConVar_Cached("pk_sv_enable_spawnfix") == 1 and ply:GetInfoNum("pk_spawnfix", 0) == 1
@@ -179,30 +179,27 @@ elseif SERVER then
         if OnFlatWall == true then
             local WallHitAngle = tr.HitNormal:Dot(tr.Normal)
             -- the angle you're looking at the wall
-            print(WallHitAngle)
-            DeadOn = WallHitAngle < -0.99 -- if we hit the wall nearly straight on, NearestPoint() is accurate enough (usually more accurate), so just use that
-        end
-
-        local shouldUseCollisionPoint = pk_spawnfix_enabled == true and InOpenAir == false and DeadOn == false
-	print(pk_spawnfix_enabled == true ,OnFlatGround == false ,DeadOn == false)
+            --DeadOn = WallHitAngle < -0.99 -- if we hit the wall nearly straight on, NearestPoint() is accurate enough (usually more accurate), so just use that
+      	    print(WallHitAngle)
+	end
+        local shouldUseCollisionPoint = pk_spawnfix_enabled == true and InOpenAir == false and DeadOn == false and OnFlatGround == false
+	print(shouldUseCollisionPoint, "AAAA")
         local NormalMultiple = tr.HitNormal * 512
         if shouldUseCollisionPoint == true and DeadOn == true and OnFlatWall == false then
-            print("2")
+
             --NormalMultiple = tr.HitNormal * 256
         elseif OnFlatWall == true then
-            print("3")
             --NormalMultiple = tr.HitNormal * 256
         end
 
-        print(tr.HitNormal)
         local vFlushPoint = tr.HitPos - NormalMultiple
-        print(DeadOn, shouldUseCollisionPoint, "A")
         vFlushPoint = ((shouldUseCollisionPoint == true) and ent:NearestCollisionPoint(vFlushPoint, tr.Normal)) or ent:NearestPoint(vFlushPoint)
         vFlushPoint = ent:GetPos() - vFlushPoint
         vFlushPoint = tr.HitPos + vFlushPoint
-        if shouldUseCollisionPoint == true and OnFlatGround == true then
-            vFlushPoint = vFlushPoint - tr.Normal * 10 -- move it towards the player so it doesn't spawn inside th slope
-        end
+        --if shouldUseCollisionPoint == true and OnFlatGround == true then
+        --    vFlushPoint = vFlushPoint - tr.Normal * 30 -- move it towards the player so it doesn't spawn inside th slope
+        --end
+	vFlushPoint = vFlushPoint - tr.Normal * 5 -- move it towards the player so it doesn't spawn inside th slope
         return vFlushPoint
     end
 
