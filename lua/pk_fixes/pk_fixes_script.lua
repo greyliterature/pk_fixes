@@ -105,7 +105,7 @@ function ENTMETA:NearestCollisionPoint(origin, direction_vec) -- returns the phy
         end
     end
 
-    nearestpos = nearestpos - perp:GetNormalized() * 0.001 -- nudge it towards the trace just by a little bit, helps with precision issues where the client thinks the physgun can grab it, but it can't
+    nearestpos = nearestpos - perp:GetNormalized() * 0.5 -- nudge it towards the trace just by a little bit, helps with precision issues where the client thinks the physgun can grab it, but it can't
     return nearestpos
 end
 
@@ -168,6 +168,8 @@ elseif SERVER then
 
     -- No longer the same method as the legacy vFlushPoint. This now accounts for slopes and collision meshes instead of using bounding boxes
     local function GetvFlushPoint(tr, ent)
+	local InOpenAir = tr.Hit == false
+	print(InOpenAir, "CCC")
         local OnFlatWall = tr.HitNormal.z == 0
         local OnFlatGround = tr.HitNormal.z > 0.9 or tr.HitNormal.z < -0.9 and OnFlatWall == false
         --
@@ -181,24 +183,25 @@ elseif SERVER then
             DeadOn = WallHitAngle < -0.99 -- if we hit the wall nearly straight on, NearestPoint() is accurate enough (usually more accurate), so just use that
         end
 
-        local shouldUseCollisionPoint = pk_spawnfix_enabled == true and OnFlatGround == false and DeadOn == false
+        local shouldUseCollisionPoint = pk_spawnfix_enabled == true and InOpenAir == false and DeadOn == false
+	print(pk_spawnfix_enabled == true ,OnFlatGround == false ,DeadOn == false)
         local NormalMultiple = tr.HitNormal * 512
         if shouldUseCollisionPoint == true and DeadOn == true and OnFlatWall == false then
             print("2")
-            NormalMultiple = tr.HitNormal * 256
+            --NormalMultiple = tr.HitNormal * 256
         elseif OnFlatWall == true then
             print("3")
-            NormalMultiple = tr.HitNormal * 256
+            --NormalMultiple = tr.HitNormal * 256
         end
 
         print(tr.HitNormal)
         local vFlushPoint = tr.HitPos - NormalMultiple
-        print(DeadOn, shouldUseCollisionPoint)
+        print(DeadOn, shouldUseCollisionPoint, "A")
         vFlushPoint = ((shouldUseCollisionPoint == true) and ent:NearestCollisionPoint(vFlushPoint, tr.Normal)) or ent:NearestPoint(vFlushPoint)
         vFlushPoint = ent:GetPos() - vFlushPoint
         vFlushPoint = tr.HitPos + vFlushPoint
-        if shouldUseCollisionPoint == true then --pk_slopefix_enabled == true and OnFlatGround == false then
-            vFlushPoint = vFlushPoint - tr.Normal * 20 -- move it towards the player so it doesn't spawn inside th slope
+        if shouldUseCollisionPoint == true and OnFlatGround == true then
+            vFlushPoint = vFlushPoint - tr.Normal * 10 -- move it towards the player so it doesn't spawn inside th slope
         end
         return vFlushPoint
     end
