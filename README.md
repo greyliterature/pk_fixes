@@ -1,6 +1,6 @@
 This script will (eventually) fix multiple issues with propspawn when it comes to Propkill, and also adds some things (1 thing currently). <br/>
 Currently it only has 1 fix. <br/>
-I had other fixes in the script, but those have been moved to experimental-branch, since they become more complex (and broken) than I had expected. <br/>
+I had other fixes in the script, but those have been moved to experimental-branch, since they became more complex (and broken) than I had expected. <br/>
 Iced Coffee had the original idea for these fixes, as well as most of the code, I just wanted to implement it in a different way that would work for general sandbox servers <br/>
 Iced Coffee's version: https://gist.github.com/IcedCoffeee/971abeec986e2786ce05f4dee0a17473 <br/>
 
