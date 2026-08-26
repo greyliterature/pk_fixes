@@ -5,6 +5,12 @@ local CurrentFilePath = debug.getinfo(function() end).short_src
 --[[----------------------------------------------------------------
         convars
 ------------------------------------------------------------------]]
+local function StandardizeConVarValue(convarvalue)
+    	convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
+    	--convarvaluetonumber = (convarvaluetonumber == 1 and true) or false -- :GetBool()
+    	convarvalue = convarvaluetonumber or convarvalue
+    	return convarvalue
+end
 local ConvarCache = {}
 --[convar] = value, 
 local function CreateConVar_either(...)
@@ -38,15 +44,14 @@ end
 local function GetConVar_Cached(convarname)
     if ConvarCache[convarname] then
         --
-        return ConvarCache[convarname]
+	print(StandardizeConVarValue(ConvarCache[convarname]), convarname, "aaa")
+        return StandardizeConVarValue(ConvarCache[convarname])
     end
 
     -- this hopefully will never happen, the cache hopefully will always work
-    local convarvalue = GetConVar(convarname):GetString()
-    convarvaluetonumber = tonumber(convarvalue) -- :GetInt() :GetFloat()
-    convarvaluetonumber = (convarvaluetonumber == 1 and true) or false -- :GetBool()
-    convarvalue = convarvaluetonumber or convarvalue
-    return convarvalue
+
+	local convarvalue = GetConVar(convarname):GetString()
+	return StandardizeConVarValue(convarvalue)
 end
 
 if CLIENT then
@@ -272,7 +277,9 @@ elseif SERVER then
         local vFlushPoint = GetvFlushPoint(tr, ent)
         ent:SetPos(vFlushPoint)
         ply:SendLua("achievements.SpawnedProp()")
+	print(type(GetConVar_Cached("pk_sv_enable_tryfix")), "DD")
         if GetConVar_Cached("pk_sv_enable_tryfix") == 1 then -- This function is incredibly painful to deal with. Please turn it off.
+		print("FIX")
 		TryFixPropPosition(ply, ent, tr.HitPos)
         end
         return ent
