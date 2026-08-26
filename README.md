@@ -39,8 +39,8 @@ Clamped server-side by Convar pk_sv_maxspawndist (default=4096) <br/>
 
 ## pk_maxsize
 Controls the max size a prop has to be before it does no physgun damage <br/>
-This is calculated by the prop's bounding radius (distance from bounding box center to 
+This is calculated by the prop's bounding radius (distance from bounding box center to furthest boundinb box corner) <br/>
 This tracks whether it was last punted or grabbed by a grav-gun, so it shouldn't affect regular grav-gun propkill <br/>
 <br/>
-Enabled server-side by Convar pk_sv_enable_maxsize (default=0)
-Changed server-side by Convar pk_sv_maxsize (default=136 [tide's gate size])
+Enabled server-side by Convar pk_sv_enable_maxsize (default=0) <br/>
+Changed server-side by Convar pk_sv_maxsize (default=136 [tide's gate size]) <br/>
