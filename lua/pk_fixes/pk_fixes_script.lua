@@ -169,6 +169,11 @@ elseif SERVER then
 		return util.TraceLine(trace)
 	end
 
+	local Coasters = {
+		["models/XQM/CoasterTrack/slope_225_2.mdl"] = true,
+		["models/XQM/CoasterTrack/slope_225_3.mdl"] = true,
+		["models/xqm/coastertrack/slope_225_4.mdl"] = true,
+	}
 	-- No longer the same method as the legacy vFlushPoint. This now accounts for slopes and collision meshes instead of using bounding boxes
 	local function GetvFlushPoint(tr, ent)
 		local InOpenAir = tr.Hit == false
@@ -177,7 +182,8 @@ elseif SERVER then
 		--
 		local ply = ent:GetCreator()
 		local pk_spawnfix_enabled = GetConVar_Cached("pk_sv_enable_spawnfix") == 1 and ply:GetInfoNum("pk_spawnfix", 0) == 1
-		local shouldUseCollisionPoint = pk_spawnfix_enabled == true and InOpenAir == false and OnFlatGround == false
+		local isModelCoaster = Coasters[ent:GetModel()] == true and OnFlatGround == false and OnFlatWall == false -- coasters work fine on slopes almost no matter what, so whitelist them
+		local shouldUseCollisionPoint = pk_spawnfix_enabled == true and InOpenAir == false and OnFlatGround == false and isModelCoaster == false
 		local NormalMultiple = tr.HitNormal * 512
 		local vFlushPoint = tr.HitPos - NormalMultiple
 		vFlushPoint = ((shouldUseCollisionPoint == true) and ent:NearestCollisionPoint(vFlushPoint, tr.Normal)) or ent:NearestPoint(vFlushPoint)
