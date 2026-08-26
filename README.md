@@ -5,6 +5,20 @@ Iced Coffee had the original idea for these fixes, as well as most of the code, 
 Iced Coffee's version: https://gist.github.com/IcedCoffeee/971abeec986e2786ce05f4dee0a17473 <br/>
 
 # Fixes: 
+## pk_spawnfix
+Whether or not to enable spawn-fix for yourself. <br/>
+Tries to fix propspawn issue where spawning props on slopes / walls will not spawn directly under the crosshair. </br>
+
+<br/>
+Enabled client-side by Convar pk_spawnfix (default=0) <br/>
+Allowed server-side by Convar pk_sv_enable_spawnfix (default=0), and <br/>
+
+## pk_tryfix: 
+Whether or not to disable TryFixPropPosition() from running by gm_spawn_pk. <br/>
+TryFixPropPosition() is a flawed function that tries to make the prop spawn inside the world (?), but usually it just makes prop spawning more annoying and sometimes causes props to spawn in other rooms / the other side of walls.
+
+<br/>
+Enabled server-side by Convar pk_sv_enable_tryfix (default=1)
 ## pk_grabfix: 
 Whether or not to enable grab-fix for yourself. <br/>
 Tries to fix propspawn issue where grabbing props in air / at high velocity is unreliable <br/>
