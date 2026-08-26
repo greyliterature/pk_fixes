@@ -171,8 +171,9 @@ elseif SERVER then
     local function GetvFlushPoint(tr, ent)
 	local InOpenAir = tr.Hit == false
         local OnFlatWall = tr.HitNormal.z == 0
-        local OnFlatGround = tr.HitNormal.z > 0.99 or tr.HitNormal.z < -0.99 and OnFlatWall == false
-        --
+        local OnFlatGround = tr.HitNormal.z > 0.996 or tr.HitNormal.z < -0.996 and OnFlatWall == false
+
+	--
         local ply = ent:GetCreator()
         local pk_spawnfix_enabled = GetConVar_Cached("pk_sv_enable_spawnfix") == 1 and ply:GetInfoNum("pk_spawnfix", 0) == 1
         local DeadOn = false
@@ -180,7 +181,6 @@ elseif SERVER then
             local WallHitAngle = tr.HitNormal:Dot(tr.Normal)
             -- the angle you're looking at the wall
             --DeadOn = WallHitAngle < -0.99 -- if we hit the wall nearly straight on, NearestPoint() is accurate enough (usually more accurate), so just use that
-      	    print(WallHitAngle)
 	end
         local shouldUseCollisionPoint = pk_spawnfix_enabled == true and InOpenAir == false and DeadOn == false and OnFlatGround == false
 	print(shouldUseCollisionPoint, "AAAA")
@@ -273,7 +273,7 @@ elseif SERVER then
         ent:SetPos(vFlushPoint)
         ply:SendLua("achievements.SpawnedProp()")
         if GetConVar_Cached("pk_sv_enable_tryfix") == 1 then -- This function is incredibly painful to deal with. Please turn it off.
-            TryFixPropPosition(ply, ent, tr.HitPos)
+		TryFixPropPosition(ply, ent, tr.HitPos)
         end
         return ent
     end
