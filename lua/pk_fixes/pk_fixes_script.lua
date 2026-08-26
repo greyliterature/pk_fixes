@@ -78,6 +78,34 @@ if SERVER then
     ---[[]]---
 end
 
+local ENTMETA = FindMetaTable("Entity")
+function ENTMETA:NearestCollisionPoint(origin, direction_vec) -- returns the physgun vector such that hitpos - physgun vector = closest point to which the prop can be moved and be hit by a trace
+    -- this fixes ent:NearestPoint() not working with physguns, because the physgun uses the collision mesh for its traces instead of the bounding box (which ent:NearestPoint() uses)
+    -- visually: https://files.catbox.moe/wb1hrj.PNG 
+    local center = self:GetPos()
+    local tocenter = origin - center
+    local perp = tocenter - direction_vec * tocenter:Dot(direction_vec)
+    local physobj = self:GetPhysicsObject()
+    local bestdist = math.huge
+    local nearestpos = nil
+    for _, meshtbl in ipairs(physobj:GetMeshConvexes()) do
+        for _, vertextbl in ipairs(meshtbl) do
+            local vertexpos = self:LocalToWorld(vertextbl["pos"])
+            local len = vertexpos - origin
+            local dot = len:Dot(direction_vec)
+            local closestalongray = origin + direction_vec * dot
+            local dist = vertexpos:DistToSqr(closestalongray)
+            if dist < bestdist then
+                bestdist = dist
+                nearestpos = vertexpos
+            end
+        end
+    end
+
+    nearestpos = nearestpos - perp:GetNormalized() * 0.001 -- nudge it towards the trace just by a little bit, helps with precision issues where the client thinks the physgun can grab it, but it can't
+    return nearestpos
+end
+
 --[[--------------------------------------------------------------------------------------------
     pk_grabfix
     This uses Iced Coffee's method to fixing physgun grab in the air, just with less detouring
@@ -135,16 +163,47 @@ elseif SERVER then
         return util.TraceLine(trace)
     end
 
-    -- This is the exact same method as the old vFlushPoint, I just like it as a separate function more
-    local function GetLegacyvFlushPoint(tr, ent)
-        local vFlushPoint = tr.HitPos - (tr.HitNormal * 512) -- Find a point that is definitely out of the object in the direction of the floor
-        vFlushPoint = ent:NearestPoint(vFlushPoint) -- Find the nearest point inside the object to that point
-        vFlushPoint = ent:GetPos() - vFlushPoint -- Get the difference
-        vFlushPoint = tr.HitPos + vFlushPoint -- Add it to our target pos
+    -- No longer the same method as the legacy vFlushPoint. This now accounts for slopes and collision meshes instead of using bounding boxes
+    local function GetvFlushPoint(tr, ent)
+        local OnFlatWall = tr.HitNormal.z == 0
+        local OnFlatGround = tr.HitNormal.z > 0.9 or tr.HitNormal.z < -0.9 and OnFlatWall == false
+        --GetConVar_Cached("pk_slopefix") == 1
+        local pk_slopefix_enabled = true
+        local DeadOn = false
+        if OnFlatWall == true then
+            local WallHitAngle = tr.HitNormal:Dot(tr.Normal)
+            -- the angle you're looking at the wall
+            print(WallHitAngle)
+            DeadOn = WallHitAngle < -0.95 -- if we hit the wall nearly straight on, NearestPoint() is accurate enough (usually more accurate), so just use that
+        end
+
+        local shouldUseCollisionPoint = pk_slopefix_enabled == true and OnFlatGround == false
+        local NormalMultiple = tr.HitNormal * 512
+        if shouldUseCollisionPoint == false then
+            print("1")
+            NormalMultiple = tr.HitNormal * 512
+        elseif DeadOn == false then
+            print("2")
+            NormalMultiple = tr.HitNormal
+        elseif OnFlatWall == true then
+            -- if it is on a flat wall then we should not nudge it so much, or else the ending math will put it outside the world
+            print("3")
+            NormalMultiple = tr.HitNormal * 512
+        end
+
+        local vFlushPoint = tr.HitPos - NormalMultiple
+        print(DeadOn, shouldUseCollisionPoint)
+        vFlushPoint = ((shouldUseCollisionPoint == true and DeadOn == false) and ent:NearestCollisionPoint(vFlushPoint, tr.Normal)) or ent:NearestPoint(vFlushPoint)
+        vFlushPoint = ent:GetPos() - vFlushPoint
+        vFlushPoint = tr.HitPos + vFlushPoint
+        if shouldUseCollisionPoint == true then --pk_slopefix_enabled == true and OnFlatGround == false then
+            --vFlushPoint = vFlushPoint - tr.Normal * 20 -- move it towards the player so it doesn't spawn inside th slope
+        end
         return vFlushPoint
     end
 
     concommand.Add("gm_spawn_pk", function(ply, cmd, args)
+        print("ran gm_spawn_pk")
         local modelname = args[1]
         ply.spawnQueue = ply.spawnQueue or {}
         ply.spawnQueue[#ply.spawnQueue + 1] = modelname
@@ -209,7 +268,7 @@ elseif SERVER then
         ent:SetCreator(ply)
         ent:Spawn()
         ent:Activate()
-        local vFlushPoint = GetLegacyvFlushPoint(tr, ent)
+        local vFlushPoint = GetvFlushPoint(tr, ent)
         ent:SetPos(vFlushPoint)
         ply:SendLua("achievements.SpawnedProp()")
         TryFixPropPosition(ply, ent, tr.HitPos)
