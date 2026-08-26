@@ -11,7 +11,7 @@ Tries to fix propspawn issue where spawning props on slopes / walls will not spa
 
 <br/>
 Enabled client-side by Convar pk_spawnfix (default=0) <br/>
-Allowed server-side by Convar pk_sv_enable_spawnfix (default=0), and <br/>
+Allowed server-side by Convar pk_sv_enable_spawnfix (default=0) <br/>
 
 ## pk_tryfix: 
 Whether or not to disable TryFixPropPosition() from running by gm_spawn_pk. <br/>
