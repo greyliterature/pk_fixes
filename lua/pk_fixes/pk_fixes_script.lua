@@ -55,6 +55,8 @@ if CLIENT then
 elseif SERVER then
     CreateConVar_Cached("pk_sv_spawndist", "0", FCVAR_ARCHIVE, "Whether or not to allow players to set the distance they spawn props", 0)
     CreateConVar_Cached("pk_sv_maxspawndist", "4096", FCVAR_ARCHIVE, "Max spawn distance for people using pk_spawndist", 0)
+    CreateConVar_Cached("pk_sv_enable_maxsize", "0", FCVAR_ARCHIVE, "Whether or not to use value from pk_sv_maxsize", 0)
+    CreateConVar_Cached("pk_sv_maxsize", "136", FCVAR_ARCHIVE, "The maximum bounding radius (center to furthest corner) a prop can be to do damage. Used to restrict overly large props (8x8 cubes) from propkill. \nREFERENCE: tide = 136, frige = 49, moped = 28", 0)
 end
 
 --[[----------------------------------------------------------------
@@ -86,7 +88,7 @@ if CLIENT then
     local firsttimepressed = false
     -- Issue: if the player uses a bind to spawn the prop like 'alias tide "gm_spawn models/props/de_tides/gate_large.mdl"' then gm_spawn_pk will never be run
     hook.Add("PlayerBindPress", CurrentFilePath .. "|Suppressgm_spawnBind", function(ply, bind, pressed)
-        if tobool(GetConVar_Cached("pk_grabfix")) == false and GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
+        if GetConVar_Cached("pk_grabfix") ~= 1 and GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
         if not string.find(bind, "gm_spawn") then return end
         firsttimepressed = not firsttimepressed
         if firsttimepressed == false then return end
@@ -122,7 +124,7 @@ elseif SERVER then
         trace.start = vStart
         --
         local PlayerSpawnDist = DefaultSpawnDist
-        local pk_spawndist_enabled = tobool(GetConVar_Cached("pk_sv_spawndist"))
+        local pk_spawndist_enabled = GetConVar_Cached("pk_sv_spawndist") == 1
         if pk_spawndist_enabled == true then
             local MaxSpawnDist = GetConVar_Cached("pk_sv_maxspawndist")
             PlayerSpawnDist = math.Clamp(ply:GetInfoNum("pk_spawndist", 2048), 0, MaxSpawnDist)
@@ -278,3 +280,57 @@ elseif SERVER then
         end
     end)
 end
+
+--[[----------------------------------------------------------------
+    pk_maxsize
+------------------------------------------------------------------]]
+if SERVER then
+    hook.Add("PlayerSpawnedProp", CurrentFilePath .. "|pk_maxsize", function(_, _, ent)
+        if GetConVar_Cached("pk_sv_enable_maxsize") ~= 1 then return end
+        if ent:BoundingRadius() > tonumber(GetConVar_Cached("pk_sv_maxsize")) then
+            ent.pk_RestrictPlayerDamage = true
+            return
+        end
+        return
+    end)
+
+    hook.Add("OnPhysgunPickup", CurrentFilePath .. "|pk_maxsize", function(_, ent)
+        if not ent.pk_RestrictPlayerDamage then return end
+        ent.pk_LastPickedUpByPhysgun = true -- track
+    end)
+
+    hook.Add("GravGunOnPickedUp", CurrentFilePath .. "|pk_maxsize", function(_, ent)
+        if not ent.pk_RestrictPlayerDamage then return end
+        ent.pk_LastPickedUpByPhysgun = nil -- untrack to allow people to grav gun propkill
+    end)
+
+    hook.Add("GravGunPunt", CurrentFilePath .. "|pk_maxsize", function(_, ent)
+        if not ent.pk_RestrictPlayerDamage then return end
+        ent.pk_LastPickedUpByPhysgun = nil -- untrack to allow people to grav gun puntkill
+    end)
+
+    hook.Add("EntityTakeDamage", CurrentFilePath .. "|pk_maxsize", function(target, dmginfo)
+        if GetConVar_Cached("pk_sv_enable_maxsize") ~= 1 then return end
+        if not target:IsPlayer() then return end
+        local ent = dmginfo:GetInflictor()
+        if ent:GetClass() ~= "prop_physics" then return end
+        if not IsValid(ent:GetCreator()) then -- World props can do whatever they want 
+            return
+        end
+
+        if not IsValid(ent:GetPhysicsAttacker()) then -- If the physicsattacker is invalid the player just got crushed by a falling prop. They should have just dodged it. Too bad. 
+            return
+        end
+
+        if not ent.pk_LastPickedUpByPhysgun then -- If it was not last picked up by a physgun then it was picked up by a grav gun. Allow grav guns to deal damage like normal 
+            return
+        end
+
+        dmginfo:SetDamage(0)
+        return true
+    end)
+end
+-- todo: 
+-- There should be feedback to inform the player that the prop wont do damage somehow.
+-- I cannot think of a way that follows basic game design principles to do this.
+-- A chatprint on spawn to the player would be the easy way, but it is too ugly. So for now I will not attempt to find a way.
