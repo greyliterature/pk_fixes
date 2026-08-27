@@ -135,7 +135,6 @@ local HandleBindPresses
 if CLIENT then
     local ValidPropCache = {} -- Probably faster than calling util.IsValidProp() on every single bindpress
     local firsttimepressed = false
-    -- Issue: if the player uses a bind to spawn the prop like 'alias tide "gm_spawn models/props/de_tides/gate_large.mdl"' then gm_spawn_pk will never be run
     function HandleBindPresses(ply, bind, pressed)
         if GetConVar_Cached("pk_grabfix") ~= 1 and GetConVar_Cached("pk_spawndist") == DefaultSpawnDist then return end
         local alias = input.TranslateAlias(bind)
