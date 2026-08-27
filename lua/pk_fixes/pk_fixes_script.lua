@@ -71,6 +71,14 @@ local function GetConVar_Cached(convarname)
     return StandardizeConVarValue(convarvalue)
 end
 
+local function RunConVarCallbacks() -- only run this after all convars are made
+    for _, tbl in pairs(ConvarCache) do
+        local convarvalue = tostring(tbl[1])
+        local func = tbl[2]
+        if func then func(convarvalue) end
+    end
+end
+
 --[[----------------------------------------------------------------
         Other
 ------------------------------------------------------------------]]
@@ -447,3 +455,5 @@ elseif SERVER then
     CreateConVar_Cached(nil, "pk_sv_enable_tryfix", "1", FCVAR_ARCHIVE, "Whether or not to use TryFixPropPosition in gm_spawn_pk. This is used in the original method for prop spawn positioning, but is flawed (props can spawn across entire walls and be ungrabbable). Recommended to turn this off, unless you really like the legacy gmod behavior.", 0)
     CreateConVar_Cached(nil, "pk_sv_enable_spawnfix", "0", FCVAR_ARCHIVE, "Whether or not to allow players to use pk_spawnfix", 0)
 end
+
+RunConVarCallbacks()
