@@ -360,8 +360,9 @@ end
 --[[----------------------------------------------------------------
     pk_maxsize
 ------------------------------------------------------------------]]
+local RestrictPropDamage
 if SERVER then
-    local function RestrictPropDamage(_, _, ent)
+    function RestrictPropDamage(_, _, ent)
         if GetConVar_Cached("pk_sv_enable_maxsize") ~= 1 then return end
         if ent:BoundingRadius() > tonumber(GetConVar_Cached("pk_sv_maxsize")) then
             ent.pk_RestrictPlayerDamage = true
